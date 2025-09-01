@@ -40,32 +40,26 @@ pub fn App() -> impl IntoView {
     };
 
     view! {
-        <main class="my-0 mx-auto pt-[10vh] flex flex-col justify-center text-center">
-            <h1 class="text-4xl text-center">"Welcome to Tauri + Leptos"</h1>
+        <main class="container">
+            <h1>"Welcome to Tauri + Leptos"</h1>
 
-            <div class="flex justify-center">
+            <div class="row">
                 <a href="https://tauri.app" target="_blank">
-                    <img src="public/tauri.svg" class="h-24 p-6 will-change-filter duration-700 hover:drop-shadow-[0_0_2em_#24c8db]" alt="Tauri logo"/>
+                    <img src="public/tauri.svg" class="logo tauri" alt="Tauri logo"/>
                 </a>
                 <a href="https://docs.rs/leptos/" target="_blank">
-                    <img src="public/leptos.svg" class="h-24 p-6 will-change-filter duration-700 hover:drop-shadow-[0_0_2em_#a82e20]" alt="Leptos logo"/>
+                    <img src="public/leptos.svg" class="logo leptos" alt="Leptos logo"/>
                 </a>
             </div>
             <p>"Click on the Tauri and Leptos logos to learn more."</p>
 
-            <form class="flex justify-center" on:submit=greet>
+            <form class="row" on:submit=greet>
                 <input
                     id="greet-input"
-                    class="rounded-lg border border-transparent px-3 py-2 text-base font-medium font-sans bg-white text-[#0f0f0f] transition-colors duration-300 shadow-[0_2px_2px_rgba(0,0,0,0.2)] focus:outline-none focus:border-[#396cd8] mr-1 dark:bg-[#0f0f0f98] dark:text-white"
                     placeholder="Enter a name..."
                     on:input=update_name
                 />
-                <button
-                    type="submit"
-                    class="rounded-lg border border-transparent px-3 py-2 text-base font-medium font-sans bg-white text-[#0f0f0f] transition-colors duration-300 shadow-[0_2px_2px_rgba(0,0,0,0.2)] cursor-pointer hover:border-[#396cd8] active:border-[#396cd8] active:bg-[#e8e8e8] dark:bg-[#0f0f0f98] dark:text-white dark:active:bg-[#0f0f0f69]"
-                >
-                    "Greet"
-                </button>
+                <button type="submit">"Greet"</button>
             </form>
             <p>{ move || greet_msg.get() }</p>
         </main>
