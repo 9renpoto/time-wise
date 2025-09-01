@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: clippy, rustfmt
+    - name: Install grcov
+      run: cargo install grcov
+    - name: Check formatting
+      run: cargo fmt -- --check
+    - name: Run clippy
+      run: cargo clippy --workspace -- -D warnings
+    - name: Run tests with coverage
+      env:
+        RUSTFLAGS: "-C instrument-coverage"
+        LLVM_PROFILE_FILE: "cargo-test-%p.profraw"
+      run: cargo test --workspace
+    - name: Generate coverage report
+      run: grcov . --binary-path ./target/debug/deps/ -s . -t lcov --branch --ignore-not-existing --ignore "target/*" --ignore ".cargo/*" -o lcov.info
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        files: lcov.info
+        fail_ci_if_error: true
