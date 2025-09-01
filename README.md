@@ -1,23 +1,43 @@
-# Title
+# Tauri + Leptos
 
-This is an example file with default selections.
+This template should help get you started developing with Tauri and Leptos.
+
+## Recommended IDE Setup
+
+[VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer).
+
+---
 
 ## Install
 
-```sh
+To get started, you need to have Rust and the Tauri CLI installed.
 
+Follow the instructions on the [Tauri website](https://tauri.app/v1/guides/getting-started/prerequisites) to set up your environment.
+
+Once the prerequisites are installed, you can clone the repository and install the dependencies:
+
+```bash
+# You need to replace <repository-url> with the actual URL
+git clone <repository-url>
+# You need to replace <repository-name> with the actual name
+cd <repository-name>
+cargo build
 ```
 
 ## Usage
 
-```sh
+To run the application in development mode:
 
+```bash
+cargo tauri dev
 ```
 
-## Contributing
+To build the application for production:
 
-PRs accepted.
+```bash
+cargo tauri build
+```
 
 ## License
 
-MIT © TBD
+This project is licensed under the terms of the [LICENSE](./LICENSE) file.
