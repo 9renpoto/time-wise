@@ -15,12 +15,32 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libwebkit2gtk-4.0-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
       with:
         components: clippy, rustfmt
     - name: Install grcov
       run: cargo install grcov
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+    - name: Install pre-commit
+      run: pip install pre-commit
+    - name: Run pre-commit hooks
+      run: pre-commit run --all-files
     - name: Check formatting
       run: cargo fmt -- --check
     - name: Run clippy
