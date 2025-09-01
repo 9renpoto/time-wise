@@ -30,7 +30,7 @@ jobs:
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
       with:
-        components: clippy, rustfmt
+        components: clippy, rustfmt, llvm-tools
     - name: Install grcov
       run: cargo install grcov
     - name: Check formatting
