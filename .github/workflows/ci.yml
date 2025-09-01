@@ -33,14 +33,6 @@ jobs:
         components: clippy, rustfmt
     - name: Install grcov
       run: cargo install grcov
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.x'
-    - name: Install pre-commit
-      run: pip install pre-commit
-    - name: Run pre-commit hooks
-      run: pre-commit run --all-files
     - name: Check formatting
       run: cargo fmt -- --check
     - name: Run clippy
