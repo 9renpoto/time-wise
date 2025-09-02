@@ -24,7 +24,7 @@
     "security": {
       "csp": null
     },
-    "macOS": {
+    "macOSPrivateApi": {
       "activationPolicy": "accessory"
     }
   },
