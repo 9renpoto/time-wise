@@ -1,7 +1,7 @@
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{TrayIconBuilder, TrayIconEvent},
-    Manager,
+    ActivationPolicy, Manager,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -9,6 +9,9 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(ActivationPolicy::Accessory);
+
             let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&quit_i])?;
             TrayIconBuilder::new()

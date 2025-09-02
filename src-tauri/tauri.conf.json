@@ -2,7 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "time-wise",
   "version": "0.1.0",
-  "identifier": "com.9renpoto.time-wise",
+  "identifier": "com.umeno.time-wise",
   "build": {
     "beforeDevCommand": "trunk serve",
     "devUrl": "http://localhost:1420",
@@ -23,8 +23,7 @@
     ],
     "security": {
       "csp": null
-    },
-    "macOSPrivateApi": true
+    }
   },
   "bundle": {
     "active": true,
@@ -35,6 +34,6 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
   }
 }
