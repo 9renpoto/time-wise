@@ -34,14 +34,12 @@ fn handle_tray_event(app: &AppHandle, event: SystemTrayEvent) {
                 let _ = window.set_focus();
             }
         }
-        SystemTrayEvent::MenuItemClick { id, .. } => {
-            match id.as_str() {
-                "quit" => {
-                    app.exit(0);
-                }
-                _ => {}
+        SystemTrayEvent::MenuItemClick { id, .. } => match id.as_str() {
+            "quit" => {
+                app.exit(0);
             }
-        }
+            _ => {}
+        },
         _ => {}
     }
 }
