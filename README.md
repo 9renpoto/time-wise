@@ -1,7 +1,5 @@
 # Tauri + Leptos
 
-[![codecov](https://codecov.io/gh/9renpoto/time-wise/graph/badge.svg?token=AN6oYXhAyl)](https://codecov.io/gh/9renpoto/time-wise)
-
 This template should help get you started developing with Tauri and Leptos.
 
 ## Recommended IDE Setup
