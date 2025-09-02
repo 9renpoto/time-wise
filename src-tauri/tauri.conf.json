@@ -23,6 +23,9 @@
     ],
     "security": {
       "csp": null
+    },
+    "macOS": {
+      "activationPolicy": "accessory"
     }
   },
   "bundle": {
