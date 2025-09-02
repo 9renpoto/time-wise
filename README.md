@@ -34,6 +34,26 @@ To run the application in development mode:
 cargo tauri dev
 ```
 
+### Running and Verifying the Application
+
+The application is configured to run as a menu bar / system tray application.
+
+1.  **First-Time Setup:** Before running for the first time, you may need to add the WebAssembly (WASM) target for Rust:
+    ```bash
+    rustup target add wasm32-unknown-unknown
+    ```
+
+2.  **Run the App:** Launch the application from your terminal:
+    ```bash
+    cargo tauri dev
+    ```
+
+3.  **Verification Steps:**
+    *   When the application starts, **no main window will appear**.
+    *   Look for a **new icon** in your operating system's menu bar (macOS) or system tray (Windows/Linux).
+    *   **Left-click** the icon. A small, borderless window should appear, displaying a dummy graph of application usage.
+    *   **Right-click** the icon. A context menu with a "Quit" option should appear. Clicking "Quit" will terminate the application.
+
 To build the application for production:
 
 ```bash
