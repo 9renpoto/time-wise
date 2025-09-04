@@ -1,7 +1,6 @@
 use tauri::{
     menu::{Menu, MenuItem},
-    tray::{TrayIconBuilder, TrayIconEvent},
-    Manager,
+    tray::TrayIconBuilder,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -19,19 +18,8 @@ pub fn run() {
                         app.exit(0);
                     }
                 })
-                .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click {
-                        button: tauri::tray::MouseButton::Left,
-                        ..
-                    } = event
-                    {
-                        let app = tray.app_handle();
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.set_focus();
-                        }
-                    }
-                })
+                // We remove the `on_tray_icon_event` handler to restore the default behavior,
+                // which is to show the menu on click. The custom handler was preventing this.
                 .build(app)?;
             Ok(())
         })
