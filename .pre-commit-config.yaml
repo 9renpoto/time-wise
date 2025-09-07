@@ -36,5 +36,5 @@ repos:
         name: test
         language: system
         types: [file, rust]
-        entry: cargo test --lib
+        entry: cargo test --workspace
         pass_filenames: false

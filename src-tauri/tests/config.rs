@@ -37,4 +37,3 @@ fn trunk_config_serving_and_bindgen_version() {
     assert_eq!(v["serve"]["port"].as_integer(), Some(1420));
     assert_eq!(v["serve"]["open"].as_bool(), Some(false));
 }
-
