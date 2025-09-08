@@ -25,4 +25,3 @@ fn cargo_tauri_features_include_image_png_and_tray_icon() {
     assert!(features.contains(&"tray-icon"), "missing tray-icon feature");
     assert!(features.contains(&"image-png"), "missing image-png feature");
 }
-
