@@ -1,4 +1,5 @@
 use tauri::{
+    image::Image,
     menu::{Menu, MenuItem},
     tray::{TrayIconBuilder, TrayIconEvent},
     Manager,
@@ -17,9 +18,14 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            // 明示的にトレイアイコンを設定（macOS では必須）。
+            let tray_icon = Image::from_bytes(include_bytes!("../icons/32x32.png"))
+                .expect("failed to load tray icon");
             let quit_item = MenuItem::with_id(app, TRAY_QUIT_ID, "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&quit_item])?;
             TrayIconBuilder::new()
+                .icon(tray_icon)
+                .icon_as_template(true)
                 .menu(&menu)
                 .tooltip("Time Wise")
                 .on_menu_event(|app, event| {
