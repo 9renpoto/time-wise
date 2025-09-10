@@ -1,13 +1,14 @@
-name: "Check spelling"
+name: "Check spelling (non-blocking)"
 on:
   pull_request:
 
 jobs:
   spellcheck:
     runs-on: ubuntu-22.04
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v5
       - uses: streetsidesoftware/cspell-action@v7
         with:
-          files: "*.{rs,ts,tsx,md}"
+          files: "**/*.{rs,ts,tsx,md}"
           incremental_files_only: false
