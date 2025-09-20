@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/streetsidesoftware/cspell-cli
-    rev: v8.17.0
+    rev: v9.2.0
     hooks:
       - id: cspell
 
@@ -12,7 +12,7 @@ repos:
         entry: secretlint/secretlint:latest secretlint
 
   - repo: https://github.com/DevinR528/cargo-sort
-    rev: v1.1.0
+    rev: v2.0.2
     hooks:
       - id: cargo-sort
 
