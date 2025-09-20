@@ -162,3 +162,26 @@ pub fn App() -> impl IntoView {
         </main>
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::bar_height;
+
+    #[test]
+    fn bar_height_zero_max_returns_zero_percent() {
+        let style = bar_height(0, 0);
+        assert!(style.contains("height:0%"));
+    }
+
+    #[test]
+    fn bar_height_scales_to_full_height() {
+        let style = bar_height(15, 15);
+        assert!(style.contains("height:100%"));
+    }
+
+    #[test]
+    fn bar_height_applies_minimum_percentage() {
+        let style = bar_height(0, 15);
+        assert!(style.contains("height:8%"));
+    }
+}

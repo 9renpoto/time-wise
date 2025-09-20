@@ -208,6 +208,7 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{atomic::Ordering, Mutex};
 
     #[test]
     fn toggle_visible_should_invert() {
@@ -223,5 +224,57 @@ mod tests {
     #[test]
     fn tray_open_id_constant() {
         assert_eq!(TRAY_OPEN_ID, "toggle");
+    }
+
+    #[test]
+    fn usage_window_state_defaults_to_hidden() {
+        let state = UsageWindowState::default();
+        assert!(!state.visible.load(Ordering::SeqCst));
+    }
+
+    struct MockWindow {
+        hide_calls: Mutex<u32>,
+        always_on_top: Mutex<Vec<bool>>,
+    }
+
+    impl MockWindow {
+        fn new() -> Self {
+            Self {
+                hide_calls: Mutex::new(0),
+                always_on_top: Mutex::new(Vec::new()),
+            }
+        }
+
+        fn hide_count(&self) -> u32 {
+            *self.hide_calls.lock().unwrap()
+        }
+
+        fn last_always_on_top(&self) -> Option<bool> {
+            self.always_on_top.lock().unwrap().last().copied()
+        }
+    }
+
+    impl WindowLike for MockWindow {
+        fn hide_window(&self) {
+            let mut calls = self.hide_calls.lock().unwrap();
+            *calls += 1;
+        }
+
+        fn set_always_on_top_window(&self, enable: bool) {
+            self.always_on_top.lock().unwrap().push(enable);
+        }
+    }
+
+    #[test]
+    fn hide_usage_window_updates_state_and_invokes_window_actions() {
+        let window = MockWindow::new();
+        let usage_state = UsageWindowState::default();
+        usage_state.visible.store(true, Ordering::SeqCst);
+
+        hide_usage_window(&window, &usage_state);
+
+        assert!(!usage_state.visible.load(Ordering::SeqCst));
+        assert_eq!(window.hide_count(), 1);
+        assert_eq!(window.last_always_on_top(), Some(false));
     }
 }
