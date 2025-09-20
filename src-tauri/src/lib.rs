@@ -62,13 +62,11 @@ fn show_usage_window(window: &WebviewWindow, usage_state: &UsageWindowState) {
 
     #[cfg(target_os = "linux")]
     {
-        if let (Ok(size), Ok(monitor)) = (window.outer_size(), window.current_monitor()) {
-            if let Some(monitor) = monitor {
-                let monitor_size = monitor.size();
-                let x = monitor_size.width as i32 - size.width as i32 - 24;
-                let y = 32;
-                let _ = window.set_position(Position::Physical(PhysicalPosition { x, y }));
-            }
+        if let (Ok(size), Ok(Some(monitor))) = (window.outer_size(), window.current_monitor()) {
+            let monitor_size = monitor.size();
+            let x = monitor_size.width as i32 - size.width as i32 - 24;
+            let y = 32;
+            let _ = window.set_position(Position::Physical(PhysicalPosition { x, y }));
         }
     }
 
@@ -194,15 +192,14 @@ pub fn run() {
             }
             Ok(())
         })
-        .on_window_event(|window, event| match event {
-            tauri::WindowEvent::CloseRequested { api, .. } => {
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == "main" {
                     let usage_state = window.app_handle().state::<UsageWindowState>();
                     hide_usage_window(window, &usage_state);
                 }
                 api.prevent_close();
             }
-            _ => {}
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
