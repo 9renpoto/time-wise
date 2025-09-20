@@ -2,7 +2,6 @@ use leptos::prelude::*;
 
 struct CategoryUsage {
     name: &'static str,
-    color: &'static str,
     minutes: u32,
 }
 
@@ -18,17 +17,14 @@ const CHART_LABELS: [&str; 4] = ["00", "06", "12", "18"];
 const CATEGORY_USAGE: [CategoryUsage; 3] = [
     CategoryUsage {
         name: "Social",
-        color: "#2563eb",
         minutes: 24,
     },
     CategoryUsage {
         name: "Utilities",
-        color: "#0ea5e9",
         minutes: 5,
     },
     CategoryUsage {
         name: "Health & Fitness",
-        color: "#f97316",
         minutes: 3,
     },
 ];
@@ -72,9 +68,7 @@ fn bar_height(bin: u32, max_bin: u32) -> String {
     } else {
         (bin as f32 / max_bin as f32 * 100.0).max(8.0)
     };
-    format!(
-        "width:16px; border-radius:6px; background:linear-gradient(180deg, #60a5fa, #3b82f6); height:{height:.0}%;"
-    )
+    format!("w-4 rounded-md bg-gradient-to-t from-blue-500 to-blue-400 h-[{:.0}%]", height)
 }
 
 #[component]
@@ -82,76 +76,79 @@ pub fn App() -> impl IntoView {
     let chart_max = CHART_BINS.iter().copied().max().unwrap_or(0);
 
     view! {
-        <main style="min-height:100vh; display:flex; align-items:flex-start; justify-content:center; padding:32px; background:linear-gradient(135deg,#0f172a,#1f2937); font-family:'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color:#0f172a;">
-            <section style="width:360px; border-radius:28px; background-color:#f8fafc; box-shadow:0 24px 48px rgba(15,23,42,0.35); overflow:hidden;">
-                <div style="padding:24px; background:linear-gradient(180deg,#ffffff,#f1f5f9);">
-                    <header style="display:flex; align-items:center; gap:1rem; margin-bottom:20px;">
-                        <div style="width:44px; height:44px; border-radius:50%; background:linear-gradient(135deg,#3b82f6,#a855f7); display:flex; align-items:center; justify-content:center; color:#fff; font-weight:600; font-size:1.25rem;">
+        <main class="min-h-screen flex items-start justify-center p-8 bg-gradient-to-br from-slate-900 to-slate-800 font-sans text-slate-900">
+            <section class="w-[360px] rounded-3xl bg-slate-50 shadow-2xl shadow-slate-900/40 overflow-hidden">
+                <div class="p-6 bg-gradient-to-b from-white to-slate-100">
+                    <header class="flex items-center gap-4 mb-5">
+                        <div class="w-11 h-11 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-semibold text-xl">
                             "A"
                         </div>
                         <div>
-                            <div style="font-size:2rem; font-weight:600; color:#0f172a;">{format!("{}m", TOTAL_MINUTES)}</div>
-                            <div style="font-size:0.85rem; color:#64748b;">"Screen time today"
-                            </div>
+                            <div class="text-3xl font-bold text-slate-900">{format!("{}m", TOTAL_MINUTES)}</div>
+                            <div class="text-sm text-slate-500">"Screen time today"</div>
                         </div>
                     </header>
-                    <div style="position:relative; height:120px; margin-bottom:20px; border-radius:18px; background:linear-gradient(180deg,#e2e8f0,#f8fafc); padding:16px 14px 12px; display:flex; align-items:flex-end; gap:12px;">
-                        <div style="position:absolute; inset:0;">
-                            <div style="position:absolute; left:0; right:0; top:12px; border-top:1px dashed rgba(148,163,184,0.5);"></div>
-                            <div style="position:absolute; left:0; right:0; top:56px; border-top:1px dashed rgba(148,163,184,0.35);"></div>
-                            <div style="position:absolute; left:0; right:0; bottom:12px; border-top:1px solid rgba(148,163,184,0.6);"></div>
+                    <div class="relative h-32 mb-5 rounded-2xl bg-gradient-to-b from-slate-200 to-slate-50 p-4 pt-3 flex items-end gap-3">
+                        <div class="absolute inset-0">
+                            <div class="absolute inset-x-0 top-3 border-t border-dashed border-slate-400/50"></div>
+                            <div class="absolute inset-x-0 top-14 border-t border-dashed border-slate-400/40"></div>
+                            <div class="absolute inset-x-0 bottom-3 border-t border-solid border-slate-400/60"></div>
                         </div>
                         {CHART_BINS
                             .iter()
                             .map(|&minutes| view! {
-                                <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:6px;">
-                                    <div style="height:72px; display:flex; align-items:flex-end;">
-                                        <div style=bar_height(minutes, chart_max)></div>
+                                <div class="flex-1 flex flex-col items-center gap-1.5">
+                                    <div class="h-[72px] flex items-end">
+                                        <div class=bar_height(minutes, chart_max)></div>
                                     </div>
                                 </div>
                             })
                             .collect::<Vec<_>>()
                             .into_view()}
-                        <div style="position:absolute; left:14px; right:14px; bottom:0; display:flex; justify-content:space-between; font-size:0.65rem; color:#64748b; text-transform:uppercase; letter-spacing:0.08em;">
+                        <div class="absolute left-3.5 right-3.5 bottom-0 flex justify-between text-xs text-slate-500 uppercase tracking-widest">
                             {CHART_LABELS
                                 .iter()
-                            .map(|&label| view! { <span>{label}</span> })
+                                .map(|&label| view! { <span>{label}</span> })
                                 .collect::<Vec<_>>()
                                 .into_view()}
                         </div>
-                        <div style="position:absolute; top:8px; right:14px; font-size:0.65rem; color:#94a3b8; text-transform:uppercase; letter-spacing:0.08em;">"60m"
-                        </div>
-                        <div style="position:absolute; top:52px; right:14px; font-size:0.65rem; color:#94a3b8; text-transform:uppercase; letter-spacing:0.08em;">"30m"
-                        </div>
-                        <div style="position:absolute; bottom:14px; right:14px; font-size:0.65rem; color:#94a3b8; text-transform:uppercase; letter-spacing:0.08em;">"0m"
-                        </div>
+                        <div class="absolute top-2 right-3.5 text-xs text-slate-400 uppercase tracking-widest">"60m"</div>
+                        <div class="absolute top-[52px] right-3.5 text-xs text-slate-400 uppercase tracking-widest">"30m"</div>
+                        <div class="absolute bottom-3.5 right-3.5 text-xs text-slate-400 uppercase tracking-widest">"0m"</div>
                     </div>
-                    <div style="display:flex; justify-content:space-between;">
+                    <div class="flex justify-between">
                         {CATEGORY_USAGE
                             .iter()
                             .map(|category| view! {
-                                <div style="display:flex; flex-direction:column; align-items:center; gap:4px; flex:1;">
-                                    <span style=move || format!("color:{}; font-size:0.85rem; font-weight:500;", category.color)>
+                                <div class="flex flex-col items-center gap-1 flex-1">
+                                    <span class=format!("text-sm font-medium {}",
+                                        match category.name {
+                                            "Social" => "text-blue-600",
+                                            "Utilities" => "text-sky-500",
+                                            "Health & Fitness" => "text-orange-500",
+                                            _ => "text-slate-500",
+                                        }
+                                    )>
                                         {category.name}
                                     </span>
-                                    <span style="font-size:0.8rem; color:#475569;">{format!("{}m", category.minutes)}</span>
+                                    <span class="text-xs text-slate-600">{format!("{}m", category.minutes)}</span>
                                 </div>
                             })
                             .collect::<Vec<_>>()
                             .into_view()}
                     </div>
                 </div>
-                <div style="padding:20px 24px 24px; background-color:#f1f5f9; display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:16px;">
+                <div class="p-6 pt-5 bg-slate-100 grid grid-cols-2 gap-4">
                     {APP_TILES
                         .iter()
                         .map(|tile| view! {
-                            <div style="display:flex; align-items:center; gap:12px; padding:8px 12px; border-radius:16px; background-color:#ffffff; box-shadow:0 4px 12px rgba(15,23,42,0.08);">
-                                <div style="width:36px; height:36px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:1.4rem;">
+                            <div class="flex items-center gap-3 p-3 pr-2 rounded-2xl bg-white shadow-md shadow-slate-200/50">
+                                <div class="w-9 h-9 rounded-xl flex items-center justify-center text-2xl">
                                     {tile.icon}
                                 </div>
-                                <div style="display:flex; flex-direction:column; gap:4px;">
-                                    <span style="font-size:0.9rem; font-weight:500; color:#0f172a;">{tile.name}</span>
-                                    <span style="font-size:0.75rem; color:#64748b;">{format!("{}m", tile.minutes)}</span>
+                                <div class="flex flex-col gap-1">
+                                    <span class="text-sm font-medium text-slate-900">{tile.name}</span>
+                                    <span class="text-xs text-slate-500">{format!("{}m", tile.minutes)}</span>
                                 </div>
                             </div>
                         })
@@ -170,18 +167,18 @@ mod tests {
     #[test]
     fn bar_height_zero_max_returns_zero_percent() {
         let style = bar_height(0, 0);
-        assert!(style.contains("height:0%"));
+        assert!(style.contains("h-[0%]"));
     }
 
     #[test]
     fn bar_height_scales_to_full_height() {
         let style = bar_height(15, 15);
-        assert!(style.contains("height:100%"));
+        assert!(style.contains("h-[100%]"));
     }
 
     #[test]
     fn bar_height_applies_minimum_percentage() {
         let style = bar_height(0, 15);
-        assert!(style.contains("height:8%"));
+        assert!(style.contains("h-[8%]"));
     }
 }
