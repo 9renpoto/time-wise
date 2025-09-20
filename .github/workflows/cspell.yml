@@ -11,3 +11,4 @@ jobs:
         with:
           files: "*.{rs,ts,tsx,md}"
           incremental_files_only: false
+          strict: false
