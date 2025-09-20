@@ -1,0 +1,230 @@
+body {
+    margin: 0;
+}
+
+.app {
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 32px;
+    background: linear-gradient(135deg, #0f172a, #1f2937);
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: #0f172a;
+}
+
+.app__card {
+    width: 360px;
+    border-radius: 28px;
+    background-color: #f8fafc;
+    box-shadow: 0 24px 48px rgba(15, 23, 42, 0.35);
+    overflow: hidden;
+}
+
+.app__summary {
+    padding: 24px;
+    background: linear-gradient(180deg, #ffffff, #f1f5f9);
+}
+
+.app__profile {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 20px;
+}
+
+.app__avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #3b82f6, #a855f7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-weight: 600;
+    font-size: 1.25rem;
+}
+
+.app__total {
+    font-size: 2rem;
+    font-weight: 600;
+    color: #0f172a;
+}
+
+.app__label {
+    font-size: 0.85rem;
+    color: #64748b;
+}
+
+.app__chart {
+    position: relative;
+    height: 120px;
+    margin-bottom: 20px;
+    border-radius: 18px;
+    background: linear-gradient(180deg, #e2e8f0, #f8fafc);
+    padding: 16px 14px 12px;
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+}
+
+.app__chart-overlay {
+    position: absolute;
+    inset: 0;
+}
+
+.app__chart-grid-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+}
+
+.app__chart-grid-line--top {
+    top: 12px;
+    border-top: 1px dashed rgba(148, 163, 184, 0.5);
+}
+
+.app__chart-grid-line--middle {
+    top: 56px;
+    border-top: 1px dashed rgba(148, 163, 184, 0.35);
+}
+
+.app__chart-grid-line--bottom {
+    bottom: 12px;
+    border-top: 1px solid rgba(148, 163, 184, 0.6);
+}
+
+.app__chart-column {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+}
+
+.app__chart-column-inner {
+    height: 72px;
+    display: flex;
+    align-items: flex-end;
+}
+
+.app__chart-bar {
+    width: 16px;
+    border-radius: 6px;
+    background: linear-gradient(180deg, #60a5fa, #3b82f6);
+}
+
+.app__chart-labels {
+    position: absolute;
+    left: 14px;
+    right: 14px;
+    bottom: 0;
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.65rem;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.app__chart-annotation {
+    position: absolute;
+    right: 14px;
+    font-size: 0.65rem;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.app__chart-annotation--top {
+    top: 8px;
+}
+
+.app__chart-annotation--middle {
+    top: 52px;
+}
+
+.app__chart-annotation--bottom {
+    bottom: 14px;
+}
+
+.app__categories {
+    display: flex;
+    justify-content: space-between;
+}
+
+.app__category {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+}
+
+.app__category-name {
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.app__category-name--social {
+    color: #2563eb;
+}
+
+.app__category-name--utilities {
+    color: #0ea5e9;
+}
+
+.app__category-name--health {
+    color: #f97316;
+}
+
+.app__category-minutes {
+    font-size: 0.8rem;
+    color: #475569;
+}
+
+.app__grid {
+    padding: 20px 24px 24px;
+    background-color: #f1f5f9;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.app__tile {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    border-radius: 16px;
+    background-color: #ffffff;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+}
+
+.app__tile-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+}
+
+.app__tile-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.app__tile-name {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #0f172a;
+}
+
+.app__tile-minutes {
+    font-size: 0.75rem;
+    color: #64748b;
+}
