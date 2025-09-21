@@ -160,3 +160,82 @@ fn format_time_of_day(ms: u64) -> String {
     let date = Date::new(&JsValue::from_f64(ms as f64));
     Date::to_locale_time_string(&date, "default").into()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::startup_record::StartupRecord;
+
+    #[test]
+    fn summarize_bucket_reports_no_runs_when_empty() {
+        assert_eq!(summarize_bucket(0, 0), "No runs yet");
+    }
+
+    #[test]
+    fn summarize_bucket_formats_average_with_pluralization() {
+        let summary = summarize_bucket(1_500, 3);
+        assert_eq!(summary, "500 ms avg · 3 runs");
+
+        let single_run = summarize_bucket(2_000, 1);
+        assert_eq!(single_run, "2.00 s avg · 1 run");
+    }
+
+    #[test]
+    fn compute_category_summary_groups_records_into_buckets() {
+        let records = vec![
+            StartupRecord {
+                recorded_at_ms: 10,
+                duration_ms: 300,
+            },
+            StartupRecord {
+                recorded_at_ms: 20,
+                duration_ms: 800,
+            },
+            StartupRecord {
+                recorded_at_ms: 30,
+                duration_ms: 2_200,
+            },
+        ];
+
+        let summary = compute_category_summary(&records);
+
+        assert_eq!(summary[0].name, "Fast starts (<0.5s)");
+        assert_eq!(summary[0].summary, "300 ms avg · 1 run");
+
+        assert_eq!(summary[1].name, "Steady starts (0.5–1.5s)");
+        assert_eq!(summary[1].summary, "800 ms avg · 1 run");
+
+        assert_eq!(summary[2].name, "Slow starts (>1.5s)");
+        assert_eq!(summary[2].summary, "2.20 s avg · 1 run");
+    }
+
+    #[test]
+    fn duration_icon_matches_duration_bucket() {
+        assert_eq!(duration_icon(100), "⚡");
+        assert_eq!(duration_icon(1_000), "🚀");
+        assert_eq!(duration_icon(5_000), "🐢");
+    }
+
+    #[test]
+    fn format_total_duration_ranges_are_human_readable() {
+        assert_eq!(format_total_duration(0), "0 ms");
+        assert_eq!(format_total_duration(900), "900 ms");
+        assert_eq!(format_total_duration(1_500), "1.5 s");
+        assert_eq!(format_total_duration(90_000), "1.5 m");
+        assert_eq!(format_total_duration(7_200_000), "2.0 h");
+    }
+
+    #[test]
+    fn format_duration_compact_scales_units() {
+        assert_eq!(format_duration_compact(0), "0");
+        assert_eq!(format_duration_compact(750), "750 ms");
+        assert_eq!(format_duration_compact(1_200), "1.2 s");
+        assert_eq!(format_duration_compact(120_000), "2.0 m");
+    }
+
+    #[test]
+    fn format_duration_retains_precision_for_seconds() {
+        assert_eq!(format_duration(500), "500 ms");
+        assert_eq!(format_duration(2_345), "2.35 s");
+    }
+}
