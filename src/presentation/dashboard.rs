@@ -1,231 +1,16 @@
 //! Leptos component definitions that render startup metrics fetched from the Tauri backend.
 
-use js_sys::{Date, Function, Promise, Reflect};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
-use serde::Deserialize;
-use wasm_bindgen::{JsCast, JsValue};
-use wasm_bindgen_futures::JsFuture;
-use web_sys::window;
 
-#[derive(Clone)]
-/// Data point backing the histogram chart.
-struct ChartPoint {
-    label: String,
-    duration_ms: u64,
-}
-
-#[derive(Clone)]
-/// Aggregated summary per performance bucket.
-struct CategorySummary {
-    name: &'static str,
-    class_names: &'static str,
-    summary: String,
-}
-
-#[derive(Clone)]
-/// UI model for each startup tile.
-struct StartupTile {
-    icon: &'static str,
-    label: String,
-    duration: String,
-}
-
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
-struct StartupRecord {
-    recorded_at_ms: u64,
-    duration_ms: u64,
-}
+use crate::application::startup_service::{
+    compute_category_summary, compute_chart_points, compute_tiles, format_duration,
+    format_duration_compact, format_timestamp, format_total_duration,
+};
+use crate::domain::startup_record::StartupRecord;
+use crate::infrastructure::tauri_adapter::load_startup_records;
 
 const STARTUP_HISTORY_LIMIT: usize = 5;
-
-async fn invoke_command<T>(command: &str) -> Result<T, JsValue>
-where
-    T: serde::de::DeserializeOwned,
-{
-    let Some(window) = window() else {
-        return Err(JsValue::from_str("missing window"));
-    };
-    let tauri = Reflect::get(&window, &JsValue::from_str("__TAURI__"))?;
-    if tauri.is_undefined() || tauri.is_null() {
-        return Err(JsValue::from_str("tauri bridge unavailable"));
-    }
-    let invoke_fn = Reflect::get(&tauri, &JsValue::from_str("invoke"))?;
-    let function = invoke_fn.dyn_into::<Function>()?;
-    let promise = function
-        .call2(&tauri, &JsValue::from_str(command), &JsValue::UNDEFINED)?
-        .dyn_into::<Promise>()?;
-    let response = JsFuture::from(promise).await?;
-    serde_wasm_bindgen::from_value(response).map_err(|err| JsValue::from_str(&err.to_string()))
-}
-
-async fn load_startup_records() -> Vec<StartupRecord> {
-    match invoke_command::<Vec<StartupRecord>>("fetch_startup_records").await {
-        Ok(mut records) => {
-            records.sort_by(|a, b| b.recorded_at_ms.cmp(&a.recorded_at_ms));
-            records
-        }
-        Err(err) => {
-            leptos::logging::log!("failed to fetch startup records: {err:?}");
-            Vec::new()
-        }
-    }
-}
-
-/// Formats the total startup duration for the header.
-fn format_total_duration(total_ms: u64) -> String {
-    if total_ms == 0 {
-        return "0 ms".to_string();
-    }
-    if total_ms >= 3_600_000 {
-        format!("{:.1} h", total_ms as f64 / 3_600_000.0)
-    } else if total_ms >= 60_000 {
-        format!("{:.1} m", total_ms as f64 / 60_000.0)
-    } else if total_ms >= 1_000 {
-        format!("{:.1} s", total_ms as f64 / 1_000.0)
-    } else {
-        format!("{total_ms} ms")
-    }
-}
-
-/// Compact human-readable duration.
-fn format_duration_compact(ms: u64) -> String {
-    if ms == 0 {
-        "0".to_string()
-    } else if ms >= 60_000 {
-        format!("{:.1} m", ms as f64 / 60_000.0)
-    } else if ms >= 1_000 {
-        format!("{:.1} s", ms as f64 / 1_000.0)
-    } else {
-        format!("{ms} ms")
-    }
-}
-
-/// Builds the chart points from the latest samples.
-fn compute_chart_points(records: &[StartupRecord]) -> Vec<ChartPoint> {
-    let mut points: Vec<ChartPoint> = records
-        .iter()
-        .take(5)
-        .map(|record| ChartPoint {
-            label: format_time_of_day(record.recorded_at_ms),
-            duration_ms: record.duration_ms,
-        })
-        .collect();
-
-    points.reverse();
-
-    while points.len() < 5 {
-        points.insert(
-            0,
-            ChartPoint {
-                label: "-".to_string(),
-                duration_ms: 0,
-            },
-        );
-    }
-
-    points
-}
-
-/// Summarizes runs into fast, steady, slow buckets.
-fn compute_category_summary(records: &[StartupRecord]) -> Vec<CategorySummary> {
-    let mut fast: (u64, usize) = (0, 0);
-    let mut steady: (u64, usize) = (0, 0);
-    let mut slow: (u64, usize) = (0, 0);
-
-    for record in records {
-        match record.duration_ms {
-            0..=500 => {
-                fast.0 += record.duration_ms;
-                fast.1 += 1;
-            }
-            501..=1_500 => {
-                steady.0 += record.duration_ms;
-                steady.1 += 1;
-            }
-            _ => {
-                slow.0 += record.duration_ms;
-                slow.1 += 1;
-            }
-        }
-    }
-
-    vec![
-        CategorySummary {
-            name: "Fast starts (<0.5s)",
-            class_names: "app__category-name app__category-name--social",
-            summary: summarize_bucket(fast.0, fast.1),
-        },
-        CategorySummary {
-            name: "Steady starts (0.5–1.5s)",
-            class_names: "app__category-name app__category-name--utilities",
-            summary: summarize_bucket(steady.0, steady.1),
-        },
-        CategorySummary {
-            name: "Slow starts (>1.5s)",
-            class_names: "app__category-name app__category-name--health",
-            summary: summarize_bucket(slow.0, slow.1),
-        },
-    ]
-}
-
-/// Formats the bucket label with average duration.
-fn summarize_bucket(total_ms: u64, count: usize) -> String {
-    if count == 0 {
-        "No runs yet".to_string()
-    } else {
-        let average = total_ms / count as u64;
-        let runs_label = if count == 1 { "run" } else { "runs" };
-        format!(
-            "{} avg · {} {}",
-            format_duration(average),
-            count,
-            runs_label
-        )
-    }
-}
-
-/// Builds the tile grid from the latest runs.
-fn compute_tiles(records: &[StartupRecord]) -> Vec<StartupTile> {
-    records
-        .iter()
-        .take(6)
-        .map(|record| StartupTile {
-            icon: duration_icon(record.duration_ms),
-            label: format_time_of_day(record.recorded_at_ms),
-            duration: format_duration(record.duration_ms),
-        })
-        .collect()
-}
-
-/// Chooses an icon matching the duration bucket.
-fn duration_icon(duration_ms: u64) -> &'static str {
-    match duration_ms {
-        0..=500 => "⚡",
-        501..=1_500 => "🚀",
-        _ => "🐢",
-    }
-}
-
-fn format_duration(ms: u64) -> String {
-    if ms >= 1_000 {
-        format!("{:.2} s", ms as f64 / 1_000.0)
-    } else {
-        format!("{ms} ms")
-    }
-}
-
-/// Formats the timestamp into a locale-aware date string.
-fn format_timestamp(ms: u64) -> String {
-    let date = Date::new(&JsValue::from_f64(ms as f64));
-    Date::to_locale_string(&date, "default", &JsValue::UNDEFINED).into()
-}
-
-/// Formats the timestamp into a locale-aware time string.
-fn format_time_of_day(ms: u64) -> String {
-    let date = Date::new(&JsValue::from_f64(ms as f64));
-    Date::to_locale_time_string(&date, "default").into()
-}
 
 /// Returns percentage height style for chart bars.
 fn bar_height(bin: u64, max_bin: u64) -> String {
@@ -239,7 +24,7 @@ fn bar_height(bin: u64, max_bin: u64) -> String {
 
 #[component]
 /// Main dashboard component rendering startup metrics.
-pub fn App() -> impl IntoView {
+pub fn Dashboard() -> impl IntoView {
     let (startup_records, set_startup_records) = signal(Vec::<StartupRecord>::new());
     let (loaded, set_loaded) = signal(false);
 
