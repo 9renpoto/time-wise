@@ -1,10 +1,16 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+mod startup_metrics;
 
+use std::env;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Instant;
+
+use startup_metrics::{fetch_startup_records, StartupMetrics};
 use tauri::{
     image::Image,
     menu::{Menu, MenuItem},
+    path::BaseDirectory,
     tray::TrayIconBuilder,
-    Manager, PhysicalPosition, Position, WebviewWindow, Window,
+    Manager, PhysicalPosition, Position, RunEvent, WebviewWindow, Window,
 };
 
 #[cfg(not(target_os = "linux"))]
@@ -99,10 +105,23 @@ fn toggle_main_window(app: &tauri::AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let startup_instant = Instant::now();
+
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .invoke_handler(tauri::generate_handler![fetch_startup_records])
         .setup(|app| {
             app.manage(UsageWindowState::default());
+
+            let storage_path = app
+                .path()
+                .resolve("startup_times.sqlite", BaseDirectory::AppData)
+                .unwrap_or_else(|err| {
+                    eprintln!("failed to resolve startup metrics path: {err}");
+                    env::temp_dir().join("time-wise-startup-times.sqlite")
+                });
+            let metrics = StartupMetrics::with_storage_path(storage_path);
+            app.manage(metrics);
 
             // 明示的にトレイアイコンを設定（macOS では必須）。
             let tray_icon = Image::from_bytes(include_bytes!("../icons/32x32.png"))
@@ -200,9 +219,20 @@ pub fn run() {
                 }
                 api.prevent_close();
             }
-        })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        });
+
+    let app = builder
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(move |app_handle, event| {
+        if let RunEvent::Ready = event {
+            let metrics = app_handle.state::<StartupMetrics>();
+            if let Err(err) = metrics.record_startup(startup_instant.elapsed()) {
+                eprintln!("failed to record startup time: {err}");
+            }
+        }
+    });
 }
 
 #[cfg(test)]
