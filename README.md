@@ -1,4 +1,8 @@
-# Tauri + Leptos
+# Time Wise
+
+Time Wise is a ScreenTime clone built with Tauri and Leptos. Thanks to Tauri's
+multi-platform runtime, the desktop app runs on macOS, Windows, and Linux with
+a shared code base.
 
 This template should help get you started developing with Tauri and Leptos.
 

@@ -16,6 +16,7 @@
 - Rust 2021、インデントはスペース4、不要な末尾空白は除去。既存が ASCII の場合は ASCII を維持します。
 - 命名規則: 関数・変数・モジュールは `snake_case`、型・トレイトは `PascalCase`、定数は `SCREAMING_SNAKE_CASE`。
 - 依存関係は `cargo-sort` で整序し、`cargo fmt` と `cargo clippy` を常に通してからレビューを依頼します。
+- CSS クラス名は BEM（Block__Element--Modifier）方式で命名します。
 
 ## テストガイドライン
 - 高速で決定的なテストを優先し、ユニットテストは同ファイルの `#[cfg(test)]`、結合テストは `tests/` に配置します。
