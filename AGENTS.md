@@ -2,7 +2,7 @@
 
 ## プロジェクト構成とモジュール配置
 - `src/`: Leptos UI。エントリは `main.rs`、主要コンポーネントは `app.rs` に実装し、機能ごとに小さく分割します。
-- `src-tauri/`: Tauri バックエンド。エントリは `src/main.rs`、トレイ制御や共有コマンドは `src/lib.rs` に配置します。
+- `src-tauri/`: Tauri バックエンド。エントリは `src/main.rs`、トレイ制御や共有コマンドは `src/lib.rs` に配置します。起動メトリクスは `src/startup_metrics.rs` で SQLite に保存し、UI からは `fetch_startup_records` コマンド経由で取得します。
 - `public/` は静的アセット、`dist/` と `target/` はビルド成果物でコミット禁止です。
 - CI・リリース設定は `.github/` 配下。`src-tauri/gen/` など生成物は手動編集しないでください。
 
@@ -11,12 +11,14 @@
 - `trunk serve` / `trunk build`: UI のみを開発・ビルドし、成果物は `dist/` に出力されます。
 - `cargo tauri build`: `trunk build` 後にデスクトップ配布物を生成します。
 - `cargo fmt --all -- --check`、`cargo clippy --workspace -- -D warnings`、`cargo test --workspace`: コミット前必須チェック。`pre-commit run -a` で cspell や secretlint もまとめて実行できます。
+- `cargo doc --workspace --no-deps`: Use Rustdoc to keep API references up-to-date. Comments and docs must be written in English.
 
 ## コーディングスタイルと命名
 - Rust 2021、インデントはスペース4、不要な末尾空白は除去。既存が ASCII の場合は ASCII を維持します。
 - 命名規則: 関数・変数・モジュールは `snake_case`、型・トレイトは `PascalCase`、定数は `SCREAMING_SNAKE_CASE`。
 - 依存関係は `cargo-sort` で整序し、`cargo fmt` と `cargo clippy` を常に通してからレビューを依頼します。
 - CSS クラス名は BEM（Block__Element--Modifier）方式で命名します。
+- Rustdoc comments should cover each public API in clear English so that `cargo doc` remains helpful.
 
 ## テストガイドライン
 - 高速で決定的なテストを優先し、ユニットテストは同ファイルの `#[cfg(test)]`、結合テストは `tests/` に配置します。

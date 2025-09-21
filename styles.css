@@ -59,6 +59,81 @@ body {
   color: #64748b;
 }
 
+.app__startup {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 16px;
+  border-radius: 16px;
+  background-color: rgba(148, 163, 184, 0.12);
+}
+
+.app__startup-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.app__startup-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.app__startup-count {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.app__startup-latest {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.app__startup-value {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.app__startup-subtext {
+  font-size: 0.75rem;
+  color: #334155;
+}
+
+.app__startup-empty {
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.app__startup-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.app__startup-list-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 0.75rem;
+  color: #475569;
+}
+
+.app__startup-list-time {
+  font-weight: 500;
+  color: #0f172a;
+}
+
+.app__startup-list-date {
+  color: #64748b;
+}
+
 .app__chart {
   position: relative;
   height: 120px;
