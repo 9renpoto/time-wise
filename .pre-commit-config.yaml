@@ -1,28 +1,32 @@
 repos:
-  - repo: https://github.com/biomejs/pre-commit
-    rev: v2.2.4 # Use the sha / tag you want to point at
+  - repo: local
     hooks:
       - id: biome-check
+        name: biome-check
+        entry: node scripts/check_style.js
+        language: system
+        files: '\\.(json|css)$'
+        pass_filenames: true
 
-  - repo: https://github.com/streetsidesoftware/cspell-cli
-    rev: v9.2.0
-    hooks:
       - id: cspell
+        name: spelling
+        entry: python3 scripts/spellcheck.py
+        language: system
+        files: '\\.(md|MD|txt)$'
+        pass_filenames: true
 
-  - repo: local
-    hooks:
       - id: secretlint
-        name: secretlint
-        language: docker_image
-        entry: secretlint/secretlint:latest secretlint
+        name: secret-scan
+        entry: python3 scripts/secret_scan.py
+        language: system
+        pass_filenames: true
 
-  - repo: https://github.com/DevinR528/cargo-sort
-    rev: v2.0.2
-    hooks:
       - id: cargo-sort
+        name: cargo-sort
+        entry: python3 scripts/cargo_sort_check.py
+        language: system
+        pass_filenames: false
 
-  - repo: local
-    hooks:
       - id: fmt
         name: fmt
         language: system
@@ -34,7 +38,7 @@ repos:
         name: clippy
         language: system
         types: [file, rust]
-        entry: cargo clippy --bins --tests --examples --all -- -D rust_2018_idioms -D warnings # Use -D warnings option to ensure the job fails when encountering warnings
+        entry: cargo clippy --bins --tests --examples --all -- -D rust_2018_idioms -D warnings
         pass_filenames: false
 
       - id: test

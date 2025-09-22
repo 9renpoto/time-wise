@@ -18,13 +18,13 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri-plugin-autostart = "2"
+rusqlite = { version = "0.31", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-png"] }
+tauri-plugin-autostart = "2"
 tauri-plugin-opener = "2"
-rusqlite = { version = "0.31", features = ["bundled"] }
 
 [dev-dependencies]
-toml = "0.9"
 tempfile = "3"
+toml = "0.9"
