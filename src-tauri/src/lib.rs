@@ -10,11 +10,12 @@ use tauri::{
     menu::{Menu, MenuItem},
     path::BaseDirectory,
     tray::TrayIconBuilder,
-    Manager, PhysicalPosition, Position, RunEvent, WebviewWindow, Window,
+    Manager, PhysicalPosition, Position, RunEvent, State, WebviewUrl, WebviewWindow, Window,
 };
 
 #[cfg(not(target_os = "linux"))]
 use tauri::tray::TrayIconEvent;
+use tauri_plugin_autostart::{AutoLaunchManager, MacosLauncher};
 
 trait WindowLike {
     fn hide_window(&self);
@@ -45,6 +46,8 @@ impl WindowLike for Window {
 pub const TRAY_QUIT_ID: &str = "quit";
 /// トレイメニューのダッシュボード表示用 ID
 pub const TRAY_OPEN_ID: &str = "toggle";
+/// 設定画面表示用 ID
+pub const TRAY_SETTINGS_ID: &str = "settings";
 
 struct UsageWindowState {
     visible: AtomicBool,
@@ -103,13 +106,62 @@ fn toggle_main_window(app: &tauri::AppHandle) {
     }
 }
 
+fn show_settings_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("settings") {
+        let _ = window.show();
+        let _ = window.set_focus();
+        return;
+    }
+
+    let _ = tauri::WebviewWindowBuilder::new(
+        app,
+        "settings",
+        WebviewUrl::App("/?view=settings".into()),
+    )
+    .title("Time Wise Settings")
+    .inner_size(420.0, 420.0)
+    .resizable(false)
+    .skip_taskbar(false)
+    .visible(true)
+    .build();
+}
+
+#[tauri::command]
+async fn get_autostart_enabled(autostart: State<'_, AutoLaunchManager>) -> Result<bool, String> {
+    autostart.is_enabled().map_err(|err| err.to_string())
+}
+
+#[tauri::command]
+async fn set_autostart_enabled(
+    autostart: State<'_, AutoLaunchManager>,
+    enabled: bool,
+) -> Result<bool, String> {
+    let result = if enabled {
+        autostart.enable()
+    } else {
+        autostart.disable()
+    };
+
+    result
+        .and_then(|_| autostart.is_enabled())
+        .map_err(|err| err.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let startup_instant = Instant::now();
 
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![fetch_startup_records])
+        .plugin(tauri_plugin_autostart::init(
+            MacosLauncher::LaunchAgent,
+            None,
+        ))
+        .invoke_handler(tauri::generate_handler![
+            fetch_startup_records,
+            get_autostart_enabled,
+            set_autostart_enabled
+        ])
         .setup(|app| {
             app.manage(UsageWindowState::default());
 
@@ -123,13 +175,27 @@ pub fn run() {
             let metrics = StartupMetrics::with_storage_path(storage_path);
             app.manage(metrics);
 
+            tauri::WebviewWindowBuilder::new(
+                app,
+                "settings",
+                WebviewUrl::App("/?view=settings".into()),
+            )
+            .title("Time Wise Settings")
+            .inner_size(420.0, 420.0)
+            .resizable(false)
+            .visible(false)
+            .skip_taskbar(false)
+            .build()?;
+
             // 明示的にトレイアイコンを設定（macOS では必須）。
             let tray_icon = Image::from_bytes(include_bytes!("../icons/32x32.png"))
                 .expect("failed to load tray icon");
             let toggle_item =
                 MenuItem::with_id(app, TRAY_OPEN_ID, "Open Usage", true, None::<&str>)?;
+            let settings_item =
+                MenuItem::with_id(app, TRAY_SETTINGS_ID, "Settings", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, TRAY_QUIT_ID, "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&toggle_item, &quit_item])?;
+            let menu = Menu::with_items(app, &[&toggle_item, &settings_item, &quit_item])?;
             TrayIconBuilder::new()
                 .icon(tray_icon)
                 .icon_as_template(true)
@@ -138,6 +204,7 @@ pub fn run() {
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     TRAY_QUIT_ID => app.exit(0),
                     TRAY_OPEN_ID => toggle_main_window(app),
+                    TRAY_SETTINGS_ID => show_settings_window(app),
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
@@ -213,11 +280,18 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                if window.label() == "main" {
-                    let usage_state = window.app_handle().state::<UsageWindowState>();
-                    hide_usage_window(window, &usage_state);
+                match window.label() {
+                    "main" => {
+                        let usage_state = window.app_handle().state::<UsageWindowState>();
+                        hide_usage_window(window, &usage_state);
+                        api.prevent_close();
+                    }
+                    "settings" => {
+                        let _ = window.hide();
+                        api.prevent_close();
+                    }
+                    _ => {}
                 }
-                api.prevent_close();
             }
         });
 
