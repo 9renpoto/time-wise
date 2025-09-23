@@ -15,6 +15,18 @@ body {
   color: #0f172a;
 }
 
+.settings-app {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  background: linear-gradient(135deg, #0f172a, #1f2937);
+  font-family:
+    "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
 .app__card {
   width: 360px;
   border-radius: 28px;
@@ -304,4 +316,81 @@ body {
 .app__tile-minutes {
   font-size: 0.75rem;
   color: #64748b;
+}
+
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  color: #0f172a;
+}
+
+.settings__header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings__title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.settings__subtitle {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.settings__content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  border-radius: 18px;
+  background-color: #ffffff;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+}
+
+.settings__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  cursor: pointer;
+}
+
+.settings__checkbox {
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  accent-color: #3b82f6;
+  cursor: pointer;
+}
+
+.settings__checkbox:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.settings__details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings__label {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.settings__description {
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.settings__status {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #dc2626;
 }

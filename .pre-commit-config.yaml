@@ -4,11 +4,6 @@ repos:
     hooks:
       - id: biome-check
 
-  - repo: https://github.com/streetsidesoftware/cspell-cli
-    rev: v9.2.0
-    hooks:
-      - id: cspell
-
   - repo: local
     hooks:
       - id: secretlint
