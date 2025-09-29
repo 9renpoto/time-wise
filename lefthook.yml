@@ -1,0 +1,81 @@
+pre-commit:
+  parallel: false
+  commands:
+    biome-check:
+      glob: "*.{js,jsx,ts,tsx,json,css,scss,html}"
+      run: |
+        python3 - <<'PY'
+        import subprocess
+        from pathlib import Path
+
+        allowed_suffixes = {
+            ".js",
+            ".jsx",
+            ".ts",
+            ".tsx",
+            ".json",
+            ".css",
+            ".scss",
+            ".html",
+        }
+
+        staged = subprocess.check_output(
+            ["git", "diff", "--name-only", "--cached", "--diff-filter=ACMR"],
+            text=True,
+        ).splitlines()
+
+        targets = [path for path in staged if Path(path).suffix.lower() in allowed_suffixes]
+        if not targets:
+            raise SystemExit(0)
+
+        subprocess.run(["biome", "check", *targets], check=True)
+        PY
+    secretlint:
+      run: |
+        python3 - <<'PY'
+        import os
+        import subprocess
+
+        staged = subprocess.check_output(
+            ["git", "diff", "--name-only", "--cached", "--diff-filter=ACMR"],
+            text=True,
+        ).splitlines()
+
+        if not staged:
+            raise SystemExit(0)
+
+        cmd = [
+            "docker",
+            "run",
+            "--rm",
+            "-v",
+            f"{os.getcwd()}:/work",
+            "-w",
+            "/work",
+            "secretlint/secretlint:latest",
+            "secretlint",
+            *staged,
+        ]
+
+        subprocess.run(cmd, check=True)
+        PY
+    cargo-sort:
+      files:
+        - "**/Cargo.toml"
+      run: cargo sort --check
+    cargo-fmt:
+      files:
+        - "**/*.rs"
+      run: cargo fmt -- --check
+
+pre-push:
+  parallel: false
+  commands:
+    cargo-clippy:
+      files:
+        - "**/*.rs"
+      run: cargo clippy --bins --tests --examples --all -- -D rust_2018_idioms -D warnings
+    cargo-test:
+      files:
+        - "**/*.rs"
+      run: cargo test --workspace
