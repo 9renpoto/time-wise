@@ -5,22 +5,16 @@ pre-commit:
       glob: "*.{js,jsx,ts,tsx,json,css,scss,html}"
       run: biome check {{staged_files}}
     cargo-sort:
-      files:
-        - "**/Cargo.toml"
+      files: "git diff --name-only --cached -- '**/Cargo.toml'"
       run: cargo sort --check
     cargo-fmt:
-      files:
-        - "**/*.rs"
+      files: "git diff --name-only --cached -- '*.rs'"
       run: cargo fmt -- --check
 
 pre-push:
   parallel: true
   commands:
     cargo-clippy:
-      files:
-        - "**/*.rs"
       run: cargo clippy --bins --tests --examples --all -- -D rust_2018_idioms -D warnings
     cargo-test:
-      files:
-        - "**/*.rs"
       run: cargo test --workspace
