@@ -29,5 +29,5 @@
 - Verify `fmt`, `clippy`, and `test` locally. Capture non-obvious decisions—like window positioning or database schema changes—in the PR body to streamline review.
 
 ## Security & Configuration Tips
-- Never commit secrets; `pre-commit run -a` executes `secretlint` and `cspell` across the tree.
+- Never commit secrets; `lefthook run pre-commit` runs Biome checks and Rust formatters on staged files.
 - Linux contributors must install WebKitGTK and libappindicator (see `README.md`) before running `cargo tauri dev` to match CI requirements.
