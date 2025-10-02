@@ -10,6 +10,8 @@ pre-commit:
     cargo-fmt:
       files: "git diff --name-only --cached -- '*.rs'"
       run: cargo fmt -- --check
+    typos:
+      run: typos
 
 pre-push:
   parallel: true
