@@ -7,7 +7,7 @@ use std::time::Instant;
 use startup_metrics::{fetch_startup_records, StartupMetrics};
 use tauri::{
     image::Image,
-    menu::{Menu, MenuItem},
+    menu::{MenuBuilder, MenuItem},
     path::BaseDirectory,
     tray::TrayIconBuilder,
     Manager, PhysicalPosition, Position, RunEvent, State, WebviewUrl, WebviewWindow, Window,
@@ -190,12 +190,27 @@ pub fn run() {
             // 明示的にトレイアイコンを設定（macOS では必須）。
             let tray_icon = Image::from_bytes(include_bytes!("../icons/32x32.png"))
                 .expect("failed to load tray icon");
-            let toggle_item =
+            let usage_item =
                 MenuItem::with_id(app, TRAY_OPEN_ID, "Open Usage", true, None::<&str>)?;
+            let containers_label = MenuItem::new(app, "Containers", false, None::<&str>)?;
+            // Placeholder desktop apps shown under Containers until runtime data is wired up.
+            let desktop_app_primary =
+                MenuItem::new(app, "Desktop App Aurora", false, None::<&str>)?;
+            let desktop_app_secondary =
+                MenuItem::new(app, "Desktop App Nimbus", false, None::<&str>)?;
             let settings_item =
-                MenuItem::with_id(app, TRAY_SETTINGS_ID, "Settings", true, None::<&str>)?;
+                MenuItem::with_id(app, TRAY_SETTINGS_ID, "Settings...", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, TRAY_QUIT_ID, "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&toggle_item, &settings_item, &quit_item])?;
+            let menu = MenuBuilder::new(app)
+                .item(&usage_item)
+                .separator()
+                .item(&containers_label)
+                .item(&desktop_app_primary)
+                .item(&desktop_app_secondary)
+                .separator()
+                .item(&settings_item)
+                .item(&quit_item)
+                .build()?;
             TrayIconBuilder::new()
                 .icon(tray_icon)
                 .icon_as_template(true)
