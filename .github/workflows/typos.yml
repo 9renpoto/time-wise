@@ -8,6 +8,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check spelling
-        uses: typos-actions/typos@v1
+        uses: crate-ci/typos@v1
         with:
           files: .
