@@ -3,7 +3,7 @@ pre-commit:
   commands:
     biome-check:
       glob: "*.{js,jsx,ts,tsx,json,css,scss,html}"
-      run: biome check {{staged_files}}
+      run: biome check {{files}}
     cargo-sort:
       files: "git diff --name-only --cached -- '**/Cargo.toml'"
       run: cargo sort --check
