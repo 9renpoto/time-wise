@@ -1,22 +1,5 @@
-{
-  "$schema": "https://raw.githubusercontent.com/streetsidesoftware/cspell/main/cspell.schema.json",
-  "version": "0.2",
-  "useGitignore": true,
-  "dictionaryDefinitions": [],
-  "dictionaries": [
-    "aws",
-    "css",
-    "filetypes",
-    "fonts",
-    "html",
-    "node",
-    "npm",
-    "redis",
-    "softwareTerms",
-    "terraform",
-    "typescript"
-  ],
-  "words": [
+[default]
+extend-ignore-words = [
     "9renpoto",
     "appindicator",
     "Avenir",
@@ -45,6 +28,4 @@
     "tauri",
     "TAURI",
     "xlink"
-  ],
-  "ignorePaths": []
-}
+]
