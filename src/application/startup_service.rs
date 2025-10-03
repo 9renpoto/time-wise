@@ -186,14 +186,17 @@ mod tests {
             StartupRecord {
                 recorded_at_ms: 10,
                 duration_ms: 300,
+                launcher: "test".to_string(),
             },
             StartupRecord {
                 recorded_at_ms: 20,
                 duration_ms: 800,
+                launcher: "test".to_string(),
             },
             StartupRecord {
                 recorded_at_ms: 30,
                 duration_ms: 2_200,
+                launcher: "test".to_string(),
             },
         ];
 
