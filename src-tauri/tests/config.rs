@@ -15,10 +15,12 @@ fn tauri_window_defaults_and_build_commands() {
     // window defaults
     let win0 = &v["app"]["windows"][0];
     assert_eq!(win0["visible"], false);
-    assert_eq!(win0["decorations"], false);
+    assert_eq!(win0["decorations"], true);
     assert_eq!(win0["skipTaskbar"], true);
-    assert_eq!(win0["width"], 400);
-    assert_eq!(win0["height"], 300);
+    assert_eq!(win0["width"], 440);
+    assert_eq!(win0["height"], 520);
+    assert_eq!(win0["minWidth"], 440);
+    assert_eq!(win0["minHeight"], 520);
 }
 
 #[test]
