@@ -22,3 +22,12 @@ pub struct StartupTile {
     pub label: String,
     pub duration: String,
 }
+
+#[derive(Clone)]
+/// UI model for desktop usage list entries.
+pub struct UsageTile {
+    pub name: String,
+    pub duration: String,
+    pub subtitle: String,
+    pub active: bool,
+}
