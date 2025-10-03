@@ -10,8 +10,11 @@ use tauri::{
     menu::{MenuBuilder, MenuItem},
     path::BaseDirectory,
     tray::TrayIconBuilder,
-    Manager, PhysicalPosition, Position, RunEvent, State, WebviewUrl, WebviewWindow, Window,
+    Manager, RunEvent, State, WebviewUrl, WebviewWindow, Window,
 };
+
+#[cfg(not(target_os = "macos"))]
+use tauri::{PhysicalPosition, Position};
 
 #[cfg(not(target_os = "linux"))]
 use tauri::tray::TrayIconEvent;
@@ -241,6 +244,10 @@ pub fn run() {
                             let usage_state = app.state::<UsageWindowState>();
                             if let Some(window) = app.get_webview_window("main") {
                                 if toggled_visible(usage_state.visible.load(Ordering::SeqCst)) {
+                                    #[cfg(target_os = "macos")]
+                                    {
+                                        let _ = (position, rect);
+                                    }
                                     #[cfg(not(target_os = "macos"))]
                                     {
                                         if let Ok(size) = window.outer_size() {
