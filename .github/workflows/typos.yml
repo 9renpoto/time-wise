@@ -1,0 +1,13 @@
+name: "Check spelling"
+on:
+  pull_request:
+
+jobs:
+  spellcheck:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check spelling
+        uses: typos-actions/typos@v1
+        with:
+          files: .
