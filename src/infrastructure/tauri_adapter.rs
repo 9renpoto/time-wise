@@ -3,7 +3,7 @@ use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{console, window};
 
-use crate::domain::startup_record::StartupRecord;
+use crate::domain::{app_usage_record::AppUsageRecord, startup_record::StartupRecord};
 
 async fn invoke_command_with<T>(command: &str, payload: JsValue) -> Result<T, JsValue>
 where
@@ -95,6 +95,24 @@ pub async fn load_startup_records() -> Vec<StartupRecord> {
         }
         Err(err) => {
             log_error(&format!("failed to fetch startup records: {err:?}"));
+            Vec::new()
+        }
+    }
+}
+
+pub async fn load_app_usage_records() -> Vec<AppUsageRecord> {
+    match invoke_command::<Vec<AppUsageRecord>>("fetch_app_usage_records").await {
+        Ok(mut records) => {
+            records.sort_by(|a, b| {
+                b.active
+                    .cmp(&a.active)
+                    .then_with(|| b.total_active_ms.cmp(&a.total_active_ms))
+                    .then_with(|| b.last_seen_at_ms.cmp(&a.last_seen_at_ms))
+            });
+            records
+        }
+        Err(err) => {
+            log_error(&format!("failed to fetch app usage records: {err:?}"));
             Vec::new()
         }
     }

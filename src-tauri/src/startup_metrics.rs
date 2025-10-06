@@ -15,6 +15,7 @@ const MAX_RECORDS: usize = 100;
 pub struct StartupRecord {
     pub recorded_at_ms: u64,
     pub duration_ms: u64,
+    pub launcher: String,
 }
 
 /// High-level manager that persists and serves startup metrics.
@@ -60,16 +61,45 @@ impl StartupMetrics {
             "CREATE TABLE IF NOT EXISTS startup_records (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 recorded_at_ms INTEGER NOT NULL,
-                duration_ms INTEGER NOT NULL
+                duration_ms INTEGER NOT NULL,
+                launcher TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_startup_records_recorded_at
                 ON startup_records(recorded_at_ms DESC);
             ",
-        )
+        )?;
+
+        Self::ensure_launcher_column(connection)
+    }
+
+    fn ensure_launcher_column(connection: &Connection) -> rusqlite::Result<()> {
+        let mut statement = connection.prepare("PRAGMA table_info(startup_records)")?;
+        let mut has_launcher_column = false;
+        let columns = statement.query_map([], |row| row.get::<_, String>(1))?;
+        for name in columns.flatten() {
+            if name == "launcher" {
+                has_launcher_column = true;
+                break;
+            }
+        }
+
+        if !has_launcher_column {
+            connection.execute("ALTER TABLE startup_records ADD COLUMN launcher TEXT", [])?;
+            connection.execute(
+                "UPDATE startup_records SET launcher = 'unknown' WHERE launcher IS NULL",
+                [],
+            )?;
+        }
+
+        Ok(())
     }
 
     /// Records the startup duration once per application run and trims the table to `MAX_RECORDS`.
-    pub fn record_startup(&self, duration: Duration) -> Result<Option<StartupRecord>, String> {
+    pub fn record_startup(
+        &self,
+        duration: Duration,
+        launcher: String,
+    ) -> Result<Option<StartupRecord>, String> {
         if self.recorded_once.swap(true, Ordering::SeqCst) {
             return Ok(None);
         }
@@ -86,6 +116,7 @@ impl StartupMetrics {
         let record = StartupRecord {
             recorded_at_ms,
             duration_ms,
+            launcher: launcher.clone(),
         };
 
         let connection = self
@@ -95,8 +126,12 @@ impl StartupMetrics {
 
         connection
             .execute(
-                "INSERT INTO startup_records (recorded_at_ms, duration_ms) VALUES (?1, ?2)",
-                params![recorded_at_ms_clamped as i64, duration_ms_clamped as i64],
+                "INSERT INTO startup_records (recorded_at_ms, duration_ms, launcher) VALUES (?1, ?2, ?3)",
+                params![
+                    recorded_at_ms_clamped as i64,
+                    duration_ms_clamped as i64,
+                    launcher
+                ],
             )
             .map_err(|err| err.to_string())?;
 
@@ -123,7 +158,7 @@ impl StartupMetrics {
         };
 
         let mut statement = match connection.prepare(
-            "SELECT recorded_at_ms, duration_ms
+            "SELECT recorded_at_ms, duration_ms, launcher
              FROM startup_records
              ORDER BY recorded_at_ms DESC",
         ) {
@@ -138,6 +173,9 @@ impl StartupMetrics {
             Ok(StartupRecord {
                 recorded_at_ms: row.get::<_, i64>(0)?.max(0) as u64,
                 duration_ms: row.get::<_, i64>(1)?.max(0) as u64,
+                launcher: row
+                    .get::<_, Option<String>>(2)?
+                    .unwrap_or_else(|| "unknown".to_string()),
             })
         }) {
             Ok(rows) => rows,
@@ -173,13 +211,15 @@ mod tests {
         for index in 0..MAX_RECORDS + 5 {
             seed_connection
                 .execute(
-                    "INSERT INTO startup_records (recorded_at_ms, duration_ms) VALUES (?1, ?2)",
-                    params![index as i64, 10i64],
+                    "INSERT INTO startup_records (recorded_at_ms, duration_ms, launcher) VALUES (?1, ?2, ?3)",
+                    params![index as i64, 10i64, "seed"],
                 )
                 .unwrap();
         }
 
-        metrics.record_startup(Duration::from_millis(10)).unwrap();
+        metrics
+            .record_startup(Duration::from_millis(10), "test".to_string())
+            .unwrap();
 
         let records = metrics.records();
         assert_eq!(records.len(), MAX_RECORDS);
@@ -197,11 +237,11 @@ mod tests {
         let metrics = StartupMetrics::with_storage_path(storage_path);
 
         assert!(metrics
-            .record_startup(Duration::from_millis(5))
+            .record_startup(Duration::from_millis(5), "test".to_string())
             .unwrap()
             .is_some());
         assert!(metrics
-            .record_startup(Duration::from_millis(5))
+            .record_startup(Duration::from_millis(5), "test".to_string())
             .unwrap()
             .is_none());
     }
