@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use sysinfo::{ProcessRefreshKind, RefreshKind, System};
+use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, RefreshKind, System};
 
 const STALE_ENTRY_GRACE: Duration = Duration::from_secs(5 * 60);
 
@@ -24,7 +24,7 @@ impl Default for AppUsageRecorder {
 impl AppUsageRecorder {
     #[must_use]
     pub fn new() -> Self {
-        let refresh = RefreshKind::new().with_processes(ProcessRefreshKind::everything());
+        let refresh = RefreshKind::nothing().with_processes(ProcessRefreshKind::everything());
         let system = System::new_with_specifics(refresh);
         Self {
             inner: Arc::new(Mutex::new(AppUsageInner::new(system))),
@@ -100,7 +100,7 @@ impl AppUsageInner {
     }
 
     fn refresh_system(&mut self) {
-        self.system.refresh_processes();
+        self.system.refresh_processes(ProcessesToUpdate::All, true);
     }
 
     fn collect_snapshot(&self) -> Vec<ProcessSnapshot> {
@@ -242,18 +242,12 @@ impl ProcessSnapshot {
             return None;
         }
 
-        let name = process.name().trim();
-        if name.is_empty() {
-            return None;
-        }
+        let name = process_name(process)?;
 
         let executable = executable_from_process(process);
 
         Some(Self {
-            identity: AppIdentity {
-                name: name.to_string(),
-                executable,
-            },
+            identity: AppIdentity { name, executable },
         })
     }
 
@@ -308,7 +302,21 @@ fn should_track_process(process: &sysinfo::Process) -> bool {
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn should_track_process(process: &sysinfo::Process) -> bool {
-    !process.name().trim().is_empty()
+    process_name(process).is_some()
+}
+
+fn process_name(process: &sysinfo::Process) -> Option<String> {
+    let name = process.name();
+    if name.is_empty() {
+        return None;
+    }
+    let name = name.to_string_lossy();
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
 }
 
 fn duration_to_ms(duration: Duration) -> u64 {
