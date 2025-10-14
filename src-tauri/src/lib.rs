@@ -19,7 +19,7 @@ use tauri::{
 #[cfg(not(target_os = "macos"))]
 use tauri::{PhysicalPosition, Position};
 
-use sysinfo::{get_current_pid, ProcessRefreshKind, RefreshKind, System};
+use sysinfo::{get_current_pid, ProcessRefreshKind, ProcessesToUpdate, RefreshKind, System};
 #[cfg(not(target_os = "linux"))]
 use tauri::tray::TrayIconEvent;
 use tauri_plugin_autostart::{AutoLaunchManager, MacosLauncher};
@@ -356,9 +356,9 @@ pub fn run() {
 }
 
 fn resolve_launcher_name() -> String {
-    let refresh = RefreshKind::new().with_processes(ProcessRefreshKind::everything());
+    let refresh = RefreshKind::nothing().with_processes(ProcessRefreshKind::everything());
     let mut system = System::new_with_specifics(refresh);
-    system.refresh_processes();
+    system.refresh_processes(ProcessesToUpdate::All, true);
 
     let mut pid = match get_current_pid() {
         Ok(pid) => pid,
@@ -391,15 +391,28 @@ fn resolve_launcher_name() -> String {
             }
         }
 
-        let name = parent_process.name().trim();
-        if !name.is_empty() {
-            fallback = Some(name.to_string());
+        if let Some(name) = process_name(parent_process) {
+            fallback = Some(name);
         }
 
         pid = parent_pid;
     }
 
     fallback.unwrap_or_else(|| "unknown".to_string())
+}
+
+fn process_name(process: &sysinfo::Process) -> Option<String> {
+    let name = process.name();
+    if name.is_empty() {
+        return None;
+    }
+    let name = name.to_string_lossy();
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
 }
 
 fn extract_app_name(path: &str) -> Option<String> {
