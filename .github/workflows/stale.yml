@@ -6,6 +6,10 @@ on:
 
 jobs:
   stale:
+    permissions:
+      issues: write
+      pull-requests: write
+      contents: read
     runs-on: ubuntu-22.04
 
     steps:
