@@ -25,7 +25,7 @@ jobs:
   bump:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: generate new version and save to env variable
         uses: actions/github-script@v8
