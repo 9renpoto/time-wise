@@ -28,5 +28,5 @@ sysinfo = { version = "0.37" }
 tokio = { version = "1", features = ["time"] }
 
 [dev-dependencies]
-toml = "0.9"
+toml = "1.0"
 tempfile = "3"
