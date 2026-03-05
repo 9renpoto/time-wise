@@ -3,7 +3,7 @@
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use wasm_bindgen::closure::Closure;
-use wasm_bindgen::JsCast;
+use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{console, window};
 
 use crate::application::startup_service::{
@@ -47,8 +47,12 @@ pub fn Dashboard() -> impl IntoView {
 
     fn schedule_usage_fetch(setter: WriteSignal<Vec<AppUsageRecord>>) {
         spawn_local(async move {
-            let records = load_app_usage_records().await;
-            setter.set(records);
+            match load_app_usage_records().await {
+                Ok(records) => setter.set(records),
+                Err(error_message) => {
+                    console::error_1(&JsValue::from_str(&error_message));
+                }
+            }
         });
     }
 
