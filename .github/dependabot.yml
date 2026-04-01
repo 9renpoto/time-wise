@@ -6,15 +6,33 @@ updates:
       interval: "weekly"
     labels:
       - "Type: Maintenance"
+    groups:
+      actions:
+        patterns:
+          - "actions/*"
+      endbug:
+        patterns:
+          - "EndBug/*"
+    cooldown:
+      default-days: 7
+
   - package-ecosystem: cargo
     directory: "/"
     schedule:
       interval: "weekly"
     labels:
       - "Type: Maintenance"
-  - package-ecosystem: npm
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    labels:
-      - "Type: Maintenance"
+    groups:
+      tauri:
+        patterns:
+          - "tauri*"
+      serde:
+        patterns:
+          - "serde*"
+      rustwasm:
+        patterns:
+          - "wasm-bindgen*"
+          - "js-sys"
+          - "web-sys"
+    cooldown:
+      default-days: 7
