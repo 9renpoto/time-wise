@@ -6,15 +6,22 @@ updates:
       interval: "weekly"
     labels:
       - "Type: Maintenance"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    cooldown:
+      default-days: 7
+
   - package-ecosystem: cargo
     directory: "/"
     schedule:
       interval: "weekly"
     labels:
       - "Type: Maintenance"
-  - package-ecosystem: npm
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    labels:
-      - "Type: Maintenance"
+    groups:
+      cargo:
+        patterns:
+          - "*"
+    cooldown:
+      default-days: 7
