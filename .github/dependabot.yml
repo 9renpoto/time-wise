@@ -9,15 +9,10 @@ updates:
     groups:
       actions:
         patterns:
-          - "actions/checkout"
-          - "actions/github-script"
-          - "actions/download-artifact"
-          - "actions/setup-node"
-          - "actions/stale"
+          - "actions/*"
       endbug:
         patterns:
-          - "EndBug/export-label-config"
-          - "EndBug/label-sync"
+          - "EndBug/*"
     cooldown:
       default-days: 7
 
@@ -30,19 +25,13 @@ updates:
     groups:
       tauri:
         patterns:
-          - "tauri"
-          - "tauri-build"
-          - "tauri-plugin-autostart"
-          - "tauri-plugin-opener"
+          - "tauri*"
       serde:
         patterns:
-          - "serde"
-          - "serde_json"
-          - "serde-wasm-bindgen"
+          - "serde*"
       rustwasm:
         patterns:
-          - "wasm-bindgen"
-          - "wasm-bindgen-futures"
+          - "wasm-bindgen*"
           - "js-sys"
           - "web-sys"
     cooldown:
