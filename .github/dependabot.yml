@@ -9,7 +9,19 @@ updates:
     groups:
       github-actions:
         patterns:
-          - "*"
+          - "actions/checkout"
+          - "actions/github-script"
+          - "actions/download-artifact"
+          - "actions/setup-node"
+          - "actions/stale"
+          - "peter-evans/create-pull-request"
+          - "dtolnay/rust-toolchain"
+          - "codecov/codecov-action"
+          - "tauri-apps/tauri-action"
+          - "crate-ci/typos"
+          - "EndBug/export-label-config"
+          - "EndBug/label-sync"
+          - "reviewdog/action-actionlint"
     cooldown:
       default-days: 7
 
@@ -20,8 +32,22 @@ updates:
     labels:
       - "Type: Maintenance"
     groups:
-      cargo:
+      tauri-dependencies:
         patterns:
-          - "*"
+          - "tauri"
+          - "tauri-build"
+          - "tauri-plugin-autostart"
+          - "tauri-plugin-opener"
+      serde-dependencies:
+        patterns:
+          - "serde"
+          - "serde_json"
+          - "serde-wasm-bindgen"
+      wasm-dependencies:
+        patterns:
+          - "wasm-bindgen"
+          - "wasm-bindgen-futures"
+          - "js-sys"
+          - "web-sys"
     cooldown:
       default-days: 7
