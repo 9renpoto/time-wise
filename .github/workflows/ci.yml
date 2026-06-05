@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v6.0.2
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
     - name: Install system dependencies
       run: |
         sudo apt-get update
@@ -31,7 +31,7 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev
     - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@stable
+      uses: dtolnay/rust-toolchain@193d6aa1dbbc28bd2c0a6b0e327cfdce68baaf6e # 1.89.0
       with:
         components: clippy, rustfmt, llvm-tools
     - name: Install grcov
@@ -48,7 +48,7 @@ jobs:
     - name: Generate coverage report
       run: grcov . --binary-path ./target/debug/deps/ -s . -t lcov --branch --ignore-not-existing --ignore "target/*" --ignore ".cargo/*" -o lcov.info
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v6
+      uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6.0.1
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         files: lcov.info
