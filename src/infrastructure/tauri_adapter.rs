@@ -109,7 +109,7 @@ pub async fn set_autostart_enabled(enabled: bool) -> AutostartStatus {
 pub async fn load_startup_records() -> Vec<StartupRecord> {
     match invoke_command::<Vec<StartupRecord>>("fetch_startup_records").await {
         Ok(mut records) => {
-            records.sort_by(|a, b| b.recorded_at_ms.cmp(&a.recorded_at_ms));
+            records.sort_by_key(|record| std::cmp::Reverse(record.recorded_at_ms));
             records
         }
         Err(err) => {

@@ -64,7 +64,7 @@ impl AppUsageRecorder {
             .map(|entry| entry.to_record(instant_now, system_now))
             .filter(|record| record.total_active_ms > 0 || record.active)
             .collect();
-        records.sort_by(|a, b| b.total_active_ms.cmp(&a.total_active_ms));
+        records.sort_by_key(|record| std::cmp::Reverse(record.total_active_ms));
         records
     }
 
