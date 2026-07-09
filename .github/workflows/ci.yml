@@ -31,8 +31,9 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev
     - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@193d6aa1dbbc28bd2c0a6b0e327cfdce68baaf6e # 1.89.0
+      uses: dtolnay/rust-toolchain@master
       with:
+        toolchain: 1.95.0
         components: clippy, rustfmt, llvm-tools
     - name: Install grcov
       run: cargo install grcov
