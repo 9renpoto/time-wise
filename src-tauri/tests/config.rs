@@ -39,3 +39,32 @@ fn trunk_config_serving_and_bindgen_version() {
     assert_eq!(v["serve"]["port"].as_integer(), Some(1420));
     assert_eq!(v["serve"]["open"].as_bool(), Some(false));
 }
+
+#[test]
+fn windows_api_dependency_is_target_specific() {
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let manifest_path = format!("{}/Cargo.toml", manifest_dir);
+    let data = fs::read_to_string(manifest_path).expect("read Cargo.toml");
+    let manifest: toml::Value = toml::from_str(&data).expect("parse Cargo.toml");
+
+    assert!(manifest["dependencies"].get("windows").is_none());
+
+    let windows = &manifest["target"]["cfg(target_os = \"windows\")"]["dependencies"]["windows"];
+    assert_eq!(windows["version"].as_str(), Some("0.62"));
+
+    let features = windows["features"]
+        .as_array()
+        .expect("windows features")
+        .iter()
+        .filter_map(toml::Value::as_str)
+        .collect::<Vec<_>>();
+    for required in [
+        "Win32_System_Power",
+        "Win32_System_RemoteDesktop",
+        "Win32_System_Threading",
+        "Win32_UI_Accessibility",
+        "Win32_UI_WindowsAndMessaging",
+    ] {
+        assert!(features.contains(&required), "missing feature: {required}");
+    }
+}

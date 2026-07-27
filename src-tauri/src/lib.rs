@@ -1,4 +1,6 @@
 mod app_usage;
+#[cfg(any(debug_assertions, test))]
+mod platform;
 mod startup_metrics;
 
 use std::env;
@@ -172,6 +174,18 @@ pub fn run() {
         ])
         .setup(|app| {
             app.manage(UsageWindowState::default());
+
+            #[cfg(debug_assertions)]
+            {
+                if env::var("TIME_WISE_WINDOWS_EVENT_PROBE").as_deref() == Ok("1") {
+                    match platform::start_event_probe() {
+                        Ok(probe) => {
+                            app.manage(probe);
+                        }
+                        Err(err) => eprintln!("failed to start Windows event probe: {err}"),
+                    }
+                }
+            }
 
             let app_usage_recorder = AppUsageRecorder::default();
             if let Err(err) = app_usage_recorder.record_current_processes() {
