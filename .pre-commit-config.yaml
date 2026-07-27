@@ -1,0 +1,82 @@
+fail_fast: true
+
+repos:
+  - repo: local
+    hooks:
+      - id: typos
+        name: typos
+        entry: typos
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: biome-check
+        name: biome-check
+        entry: biome check
+        language: system
+        files: \.(js|jsx|ts|tsx|json|css|scss|html)$
+        stages: [pre-commit]
+
+      - id: cargo-sort
+        name: cargo-sort
+        entry: cargo sort --check
+        language: system
+        files: (^|/)Cargo\.toml$
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: cargo-fmt
+        name: cargo-fmt
+        entry: cargo fmt -- --check
+        language: system
+        files: \.rs$
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: clippy-workspace
+        name: clippy-workspace
+        entry: cargo clippy --workspace --bins --tests --examples -- -D rust_2018_idioms -D warnings
+        language: system
+        files: ^Cargo\.(toml|lock)$
+        pass_filenames: false
+        stages: [pre-push]
+
+      - id: clippy-ui
+        name: clippy-ui
+        entry: cargo clippy -p time-wise-ui --bins --tests --examples -- -D rust_2018_idioms -D warnings
+        language: system
+        files: ^src/.*\.rs$
+        pass_filenames: false
+        stages: [pre-push]
+
+      - id: clippy-tauri
+        name: clippy-tauri
+        entry: cargo clippy -p time-wise --bins --tests --examples -- -D rust_2018_idioms -D warnings
+        language: system
+        files: ^src-tauri/
+        pass_filenames: false
+        stages: [pre-push]
+
+      - id: test-workspace
+        name: test-workspace
+        entry: cargo test --workspace
+        language: system
+        files: ^Cargo\.(toml|lock)$
+        pass_filenames: false
+        stages: [pre-push]
+
+      - id: test-ui
+        name: test-ui
+        entry: cargo test -p time-wise-ui
+        language: system
+        files: ^src/.*\.rs$
+        pass_filenames: false
+        stages: [pre-push]
+
+      - id: test-tauri
+        name: test-tauri
+        entry: cargo test -p time-wise
+        language: system
+        files: ^src-tauri/
+        pass_filenames: false
+        stages: [pre-push]

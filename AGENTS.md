@@ -8,7 +8,7 @@
 ## Build, Test, and Development Commands
 - `cargo tauri dev` – Launch the desktop shell with live-reloaded UI at `http://localhost:1420`.
 - `trunk serve` / `trunk build` – Develop or bundle the Web UI without the shell.
-- `cargo check` • `cargo fmt --all` • `cargo clippy --workspace -- -D warnings` – Fast validation, formatting, and lint gates; run before every commit.
+- `cargo check` • `cargo fmt --all` • `cargo clippy --workspace -- -D warnings` – Full-workspace validation commands; use them after shared manifest or cross-package changes.
 - `cargo test --workspace` – Execute all unit tests, including presentation helpers and backend utilities.
 - `cargo tauri build` – Produce distributable binaries (runs `trunk build` first).
 - `cargo doc --workspace --no-deps` – Refresh Rustdoc; public comments must be English.
@@ -21,7 +21,7 @@
 ## Testing Guidelines
 - Co-locate unit tests in the same file under `#[cfg(test)]`; integration tests belong in `tests/`.
 - Keep tests deterministic and lightweight—mock IO when possible.
-- Run `cargo test --workspace` before every PR; CI computes coverage via grcov/Codecov and will flag gaps.
+- Let prek and CI select package-level tests for isolated changes. Run `cargo test --workspace` for shared manifests, cross-package changes, and release validation; pushes to `main` refresh full-workspace coverage via grcov/Codecov.
 
 ## Commit & Pull Request Guidelines
 - Follow Conventional Commits (`feat:`, `fix:`, `chore:`). Example: `feat: add settings tray entry`.
@@ -29,5 +29,5 @@
 - Verify `fmt`, `clippy`, and `test` locally. Capture non-obvious decisions—like window positioning or database schema changes—in the PR body to streamline review.
 
 ## Security & Configuration Tips
-- Never commit secrets; `lefthook run pre-commit` runs Biome checks and Rust formatters on staged files.
+- Never commit secrets; install prek with `cargo install --locked prek`, then install the hooks with `prek install --overwrite` and `prek install --overwrite --hook-type pre-push`. Prek runs fail-first checks and selects Rust verification from the files changed before pushes.
 - Linux contributors must install WebKitGTK and libappindicator (see `README.md`) before running `cargo tauri dev` to match CI requirements.
