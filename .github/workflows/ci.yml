@@ -118,12 +118,25 @@ jobs:
         if: steps.changes.outputs.scope != 'none'
         run: cargo install grcov
 
-      - name: Run workspace tests with coverage
+      - name: Run tests with coverage
         if: steps.changes.outputs.scope != 'none'
+        shell: bash
         env:
           RUSTFLAGS: "-C instrument-coverage"
           LLVM_PROFILE_FILE: "cargo-test-%p.profraw"
-        run: cargo test --workspace
+          SCOPE: ${{ steps.changes.outputs.scope }}
+        run: |
+          case "$SCOPE" in
+            ui)
+              cargo test -p time-wise-ui
+              ;;
+            tauri)
+              cargo test -p time-wise
+              ;;
+            workspace)
+              cargo test --workspace
+              ;;
+          esac
 
       - name: Generate coverage report
         if: steps.changes.outputs.scope != 'none'
