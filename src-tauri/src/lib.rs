@@ -294,10 +294,14 @@ pub fn run() {
                                                 .map(|monitor| monitor.size().height as f64)
                                                 .unwrap_or(position.y * 2.0);
                                             let x = position.x - (size.width as f64 / 2.0);
+                                            let tray_height = match rect.size {
+                                                tauri::Size::Physical(size) => size.height as f64,
+                                                tauri::Size::Logical(size) => size.height,
+                                            };
                                             let y = if position.y > monitor_height / 2.0 {
                                                 position.y - size.height as f64 - 12.0
                                             } else {
-                                                position.y + rect.size.height + 12.0
+                                                position.y + tray_height + 12.0
                                             };
                                             let _ = window.set_position(Position::Physical(
                                                 PhysicalPosition {
