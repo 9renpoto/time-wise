@@ -114,41 +114,23 @@ jobs:
               ;;
           esac
 
-      - name: Run targeted tests
-        if: github.event_name == 'pull_request' && steps.changes.outputs.scope != 'none'
-        shell: bash
-        env:
-          SCOPE: ${{ steps.changes.outputs.scope }}
-        run: |
-          case "$SCOPE" in
-            ui)
-              cargo test -p time-wise-ui
-              ;;
-            tauri)
-              cargo test -p time-wise
-              ;;
-            workspace)
-              cargo test --workspace
-              ;;
-          esac
-
       - name: Install grcov
-        if: github.event_name == 'push' && steps.changes.outputs.scope != 'none'
+        if: steps.changes.outputs.scope != 'none'
         run: cargo install grcov
 
       - name: Run workspace tests with coverage
-        if: github.event_name == 'push' && steps.changes.outputs.scope != 'none'
+        if: steps.changes.outputs.scope != 'none'
         env:
           RUSTFLAGS: "-C instrument-coverage"
           LLVM_PROFILE_FILE: "cargo-test-%p.profraw"
         run: cargo test --workspace
 
       - name: Generate coverage report
-        if: github.event_name == 'push' && steps.changes.outputs.scope != 'none'
+        if: steps.changes.outputs.scope != 'none'
         run: grcov . --binary-path ./target/debug/deps/ -s . -t lcov --branch --ignore-not-existing --ignore "target/*" --ignore ".cargo/*" -o lcov.info
 
       - name: Upload coverage to Codecov
-        if: github.event_name == 'push' && steps.changes.outputs.scope != 'none'
+        if: steps.changes.outputs.scope != 'none'
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}

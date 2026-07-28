@@ -1,4 +1,6 @@
 mod app_usage;
+#[cfg(any(debug_assertions, test))]
+mod platform;
 mod startup_metrics;
 
 use std::env;
@@ -173,6 +175,18 @@ pub fn run() {
         .setup(|app| {
             app.manage(UsageWindowState::default());
 
+            #[cfg(debug_assertions)]
+            {
+                if env::var("TIME_WISE_WINDOWS_EVENT_PROBE").as_deref() == Ok("1") {
+                    match platform::start_event_probe() {
+                        Ok(probe) => {
+                            app.manage(probe);
+                        }
+                        Err(err) => eprintln!("failed to start Windows event probe: {err}"),
+                    }
+                }
+            }
+
             let app_usage_recorder = AppUsageRecorder::default();
             if let Err(err) = app_usage_recorder.record_current_processes() {
                 eprintln!("failed to seed app usage data: {err}");
@@ -280,10 +294,14 @@ pub fn run() {
                                                 .map(|monitor| monitor.size().height as f64)
                                                 .unwrap_or(position.y * 2.0);
                                             let x = position.x - (size.width as f64 / 2.0);
+                                            let tray_height = match rect.size {
+                                                tauri::Size::Physical(size) => size.height as f64,
+                                                tauri::Size::Logical(size) => size.height,
+                                            };
                                             let y = if position.y > monitor_height / 2.0 {
                                                 position.y - size.height as f64 - 12.0
                                             } else {
-                                                position.y + rect.size.height + 12.0
+                                                position.y + tray_height + 12.0
                                             };
                                             let _ = window.set_position(Position::Physical(
                                                 PhysicalPosition {
