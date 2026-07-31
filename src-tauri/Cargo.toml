@@ -14,17 +14,15 @@ edition = "2021"
 name = "time_wise_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
-[build-dependencies]
-tauri-build = { version = "2", features = [] }
-
 [dependencies]
-tauri-plugin-autostart = "2"
+chrono = "0.4.45"
+rusqlite = { version = "0.40", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-png"] }
-tauri-plugin-opener = "2"
-rusqlite = { version = "0.40", features = ["bundled"] }
 sysinfo = { version = "0.38" }
+tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-png"] }
+tauri-plugin-autostart = "2"
+tauri-plugin-opener = "2"
 tokio = { version = "1", features = ["time"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
@@ -39,6 +37,9 @@ windows = { version = "0.62", features = [
     "Win32_UI_WindowsAndMessaging",
 ] }
 
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
 [dev-dependencies]
-toml = "1.0"
 tempfile = "3"
+toml = "1.0"

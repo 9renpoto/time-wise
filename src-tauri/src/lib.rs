@@ -1,13 +1,14 @@
 mod app_usage;
-#[cfg(any(debug_assertions, test))]
 mod platform;
 mod startup_metrics;
 pub mod usage_history;
+mod usage_recorder;
 
 use std::env;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Instant;
+use std::sync::Arc;
+use std::time::{Duration, Instant, SystemTime};
 
 use app_usage::{AppUsageRecord, AppUsageRecorder, APP_USAGE_POLL_INTERVAL};
 use startup_metrics::{fetch_startup_records, StartupMetrics};
@@ -19,6 +20,7 @@ use tauri::{
     Manager, RunEvent, State, WebviewUrl, WebviewWindow, Window,
 };
 use usage_history::UsageHistoryStore;
+use usage_recorder::{UsageRecorder, CHECKPOINT_INTERVAL_SECONDS};
 
 #[cfg(not(target_os = "macos"))]
 use tauri::{PhysicalPosition, Position};
@@ -177,18 +179,6 @@ pub fn run() {
         .setup(|app| {
             app.manage(UsageWindowState::default());
 
-            #[cfg(debug_assertions)]
-            {
-                if env::var("TIME_WISE_WINDOWS_EVENT_PROBE").as_deref() == Ok("1") {
-                    match platform::start_event_probe() {
-                        Ok(probe) => {
-                            app.manage(probe);
-                        }
-                        Err(err) => eprintln!("failed to start Windows event probe: {err}"),
-                    }
-                }
-            }
-
             let app_usage_recorder = AppUsageRecorder::default();
             if let Err(err) = app_usage_recorder.record_current_processes() {
                 eprintln!("failed to seed app usage data: {err}");
@@ -225,7 +215,35 @@ pub fn run() {
                 });
             match UsageHistoryStore::with_storage_path(usage_history_path) {
                 Ok(store) => {
+                    let store = Arc::new(store);
+                    let recorder = Arc::new(UsageRecorder::new(store.clone()));
                     app.manage(store);
+
+                    match platform::start_event_probe() {
+                        Ok((probe, event_receiver)) => {
+                            let event_recorder = recorder.clone();
+                            tauri::async_runtime::spawn_blocking(move || {
+                                while let Ok(event) = event_receiver.recv() {
+                                    event_recorder.handle_event(event);
+                                }
+                            });
+                            app.manage(probe);
+                        }
+                        Err(err) => {
+                            recorder.record_subscription_failure(err.clone());
+                            eprintln!("failed to start Windows event probe: {err}");
+                        }
+                    }
+
+                    let checkpoint_recorder = recorder.clone();
+                    tauri::async_runtime::spawn(async move {
+                        loop {
+                            tokio::time::sleep(Duration::from_secs(CHECKPOINT_INTERVAL_SECONDS))
+                                .await;
+                            checkpoint_recorder.checkpoint(SystemTime::now());
+                        }
+                    });
+                    app.manage(recorder);
                 }
                 Err(err) => eprintln!("failed to initialize usage history database: {err}"),
             }
@@ -379,13 +397,23 @@ pub fn run() {
 
     let launcher = resolve_launcher_name();
 
-    app.run(move |app_handle, event| {
-        if let RunEvent::Ready = event {
+    app.run(move |app_handle, event| match event {
+        RunEvent::Ready => {
             let metrics = app_handle.state::<StartupMetrics>();
             if let Err(err) = metrics.record_startup(startup_instant.elapsed(), launcher.clone()) {
                 eprintln!("failed to record startup time: {err}");
             }
         }
+        RunEvent::Exit => {
+            if let Some(recorder) = app_handle.try_state::<Arc<UsageRecorder>>() {
+                recorder.stop(SystemTime::now());
+                let diagnostics = recorder.diagnostics();
+                if diagnostics != Default::default() {
+                    eprintln!("usage recorder diagnostics at exit: {diagnostics:?}");
+                }
+            }
+        }
+        _ => {}
     });
 }
 
