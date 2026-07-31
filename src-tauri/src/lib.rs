@@ -2,6 +2,7 @@ mod app_usage;
 #[cfg(any(debug_assertions, test))]
 mod platform;
 mod startup_metrics;
+pub mod usage_history;
 
 use std::env;
 use std::path::Path;
@@ -17,6 +18,7 @@ use tauri::{
     tray::TrayIconBuilder,
     Manager, RunEvent, State, WebviewUrl, WebviewWindow, Window,
 };
+use usage_history::UsageHistoryStore;
 
 #[cfg(not(target_os = "macos"))]
 use tauri::{PhysicalPosition, Position};
@@ -213,6 +215,20 @@ pub fn run() {
                 });
             let metrics = StartupMetrics::with_storage_path(storage_path);
             app.manage(metrics);
+
+            let usage_history_path = app
+                .path()
+                .resolve("usage_history.sqlite", BaseDirectory::AppLocalData)
+                .unwrap_or_else(|err| {
+                    eprintln!("failed to resolve usage history path: {err}");
+                    env::temp_dir().join("time-wise-usage-history.sqlite")
+                });
+            match UsageHistoryStore::with_storage_path(usage_history_path) {
+                Ok(store) => {
+                    app.manage(store);
+                }
+                Err(err) => eprintln!("failed to initialize usage history database: {err}"),
+            }
 
             tauri::WebviewWindowBuilder::new(
                 app,
