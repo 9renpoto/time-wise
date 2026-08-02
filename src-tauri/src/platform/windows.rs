@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 use std::sync::{mpsc, Mutex, OnceLock};
 use std::thread::{self, JoinHandle};
-use std::time::UNIX_EPOCH;
 
 use windows::core::{w, PWSTR};
 use windows::Win32::Foundation::{
@@ -41,7 +40,10 @@ pub struct EventProbe {
     logger: Option<JoinHandle<()>>,
 }
 
-pub fn start_event_probe() -> Result<EventProbe, String> {
+pub fn start_event_probe<F>(handler: F) -> Result<EventProbe, String>
+where
+    F: Fn(DesktopEvent) + Send + 'static,
+{
     let (event_sender, event_receiver) = mpsc::channel();
     set_event_sender(Some(event_sender.clone()));
 
@@ -74,7 +76,7 @@ pub fn start_event_probe() -> Result<EventProbe, String> {
         .name("windows-event-probe-logger".to_string())
         .spawn(move || {
             while let Ok(event) = event_receiver.recv() {
-                log_event(&event);
+                handler(event);
             }
         }) {
         Ok(logger) => logger,
@@ -364,21 +366,4 @@ fn emit(event: DesktopEvent) {
             let _ = sender.send(event);
         }
     }
-}
-
-fn log_event(event: &DesktopEvent) {
-    let observed_at_ms = event
-        .observed_at
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis())
-        .unwrap_or_default();
-    let process_id = event.process.as_ref().map(|process| process.process_id);
-    let executable = event
-        .process
-        .as_ref()
-        .map(|process| process.executable.display().to_string());
-    eprintln!(
-        "[windows-event-probe] observed_at_ms={observed_at_ms} kind={:?} pid={process_id:?} executable={executable:?} failure={:?}",
-        event.kind, event.failure
-    );
 }

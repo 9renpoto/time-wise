@@ -1,12 +1,16 @@
 mod app_usage;
-#[cfg(any(debug_assertions, test))]
+#[cfg(any(target_os = "windows", test))]
 mod platform;
 mod startup_metrics;
 pub mod usage_history;
+#[cfg(any(target_os = "windows", test))]
+mod usage_recorder;
 
 use std::env;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(target_os = "windows")]
+use std::sync::Arc;
 use std::time::Instant;
 
 use app_usage::{AppUsageRecord, AppUsageRecorder, APP_USAGE_POLL_INTERVAL};
@@ -19,6 +23,8 @@ use tauri::{
     Manager, RunEvent, State, WebviewUrl, WebviewWindow, Window,
 };
 use usage_history::UsageHistoryStore;
+#[cfg(target_os = "windows")]
+use usage_recorder::{UsageRecorder, CHECKPOINT_INTERVAL};
 
 #[cfg(not(target_os = "macos"))]
 use tauri::{PhysicalPosition, Position};
@@ -177,18 +183,6 @@ pub fn run() {
         .setup(|app| {
             app.manage(UsageWindowState::default());
 
-            #[cfg(debug_assertions)]
-            {
-                if env::var("TIME_WISE_WINDOWS_EVENT_PROBE").as_deref() == Ok("1") {
-                    match platform::start_event_probe() {
-                        Ok(probe) => {
-                            app.manage(probe);
-                        }
-                        Err(err) => eprintln!("failed to start Windows event probe: {err}"),
-                    }
-                }
-            }
-
             let app_usage_recorder = AppUsageRecorder::default();
             if let Err(err) = app_usage_recorder.record_current_processes() {
                 eprintln!("failed to seed app usage data: {err}");
@@ -225,6 +219,39 @@ pub fn run() {
                 });
             match UsageHistoryStore::with_storage_path(usage_history_path) {
                 Ok(store) => {
+                    #[cfg(target_os = "windows")]
+                    {
+                        let store = Arc::new(store);
+                        let own_executable = env::current_exe().unwrap_or_default();
+                        let recorder = Arc::new(UsageRecorder::new(store.clone(), own_executable));
+                        let recorder_for_events = recorder.clone();
+                        match platform::start_event_probe(move |event| {
+                            if let Err(err) = recorder_for_events.handle_event(event) {
+                                eprintln!("failed to record Windows desktop event: {err}");
+                            }
+                        }) {
+                            Ok(probe) => {
+                                app.manage(probe);
+                            }
+                            Err(err) => eprintln!("failed to start Windows event probe: {err}"),
+                        }
+
+                        let recorder_for_checkpoint = recorder.clone();
+                        tauri::async_runtime::spawn(async move {
+                            loop {
+                                tokio::time::sleep(CHECKPOINT_INTERVAL).await;
+                                if let Err(err) =
+                                    recorder_for_checkpoint.checkpoint(std::time::SystemTime::now())
+                                {
+                                    eprintln!("failed to checkpoint usage session: {err}");
+                                }
+                            }
+                        });
+                        app.manage(recorder);
+                        app.manage(store);
+                    }
+
+                    #[cfg(not(target_os = "windows"))]
                     app.manage(store);
                 }
                 Err(err) => eprintln!("failed to initialize usage history database: {err}"),
@@ -380,6 +407,14 @@ pub fn run() {
     let launcher = resolve_launcher_name();
 
     app.run(move |app_handle, event| {
+        #[cfg(target_os = "windows")]
+        if matches!(&event, RunEvent::Exit | RunEvent::ExitRequested { .. }) {
+            if let Some(recorder) = app_handle.try_state::<Arc<UsageRecorder>>() {
+                if let Err(err) = recorder.stop(std::time::SystemTime::now()) {
+                    eprintln!("failed to finalize usage session: {err}");
+                }
+            }
+        }
         if let RunEvent::Ready = event {
             let metrics = app_handle.state::<StartupMetrics>();
             if let Err(err) = metrics.record_startup(startup_instant.elapsed(), launcher.clone()) {
