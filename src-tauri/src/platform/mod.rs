@@ -5,13 +5,9 @@ use std::path::PathBuf;
 #[cfg(any(target_os = "windows", test))]
 use std::time::SystemTime;
 
-#[cfg(not(target_os = "windows"))]
-mod noop;
 #[cfg(target_os = "windows")]
 mod windows;
 
-#[cfg(not(target_os = "windows"))]
-pub use noop::start_event_probe;
 #[cfg(target_os = "windows")]
 pub use windows::start_event_probe;
 

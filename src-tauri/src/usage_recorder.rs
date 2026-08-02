@@ -7,6 +7,7 @@ use chrono::{DateTime, Local};
 use crate::platform::{DesktopEvent, DesktopEventKind};
 use crate::usage_history::{AppMetadata, NewUsageSession, UsageHistoryStore, UsageSubject};
 
+#[cfg(target_os = "windows")]
 pub const CHECKPOINT_INTERVAL: Duration = Duration::from_secs(30);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -27,6 +28,7 @@ struct ActiveSession {
 struct RecorderState {
     active: Option<ActiveSession>,
     interrupted: bool,
+    last_event_at_ms: Option<u64>,
 }
 
 pub struct UsageRecorder {
@@ -48,22 +50,29 @@ impl UsageRecorder {
     pub fn handle_event(&self, event: DesktopEvent) -> Result<(), String> {
         let at_ms = system_time_to_ms(event.observed_at)?;
         let mut state = self.lock_state()?;
-        match event.kind {
+        if state
+            .last_event_at_ms
+            .is_some_and(|last_event_at_ms| at_ms < last_event_at_ms)
+        {
+            return Ok(());
+        }
+        let result = match event.kind {
             DesktopEventKind::ForegroundChanged => {
                 if state.interrupted {
-                    return Ok(());
+                    Ok(())
+                } else {
+                    let subject = event
+                        .process
+                        .as_ref()
+                        .map(|process| process.executable.as_path())
+                        .and_then(|path| self.subject_for_executable(path));
+                    let subject = match (subject, event.failure) {
+                        (Some(subject), _) => Some(subject),
+                        (None, Some(_)) => Some(OwnedSubject::Unclassified),
+                        (None, None) => None,
+                    };
+                    self.switch_subject(&mut state, subject, at_ms)
                 }
-                let subject = event
-                    .process
-                    .as_ref()
-                    .map(|process| process.executable.as_path())
-                    .and_then(|path| self.subject_for_executable(path));
-                let subject = match (subject, event.failure) {
-                    (Some(subject), _) => Some(subject),
-                    (None, Some(_)) => Some(OwnedSubject::Unclassified),
-                    (None, None) => None,
-                };
-                self.switch_subject(&mut state, subject, at_ms)
             }
             DesktopEventKind::SessionLocked | DesktopEventKind::Suspended => {
                 self.finish_active(&mut state, at_ms, interruption_reason(&event.kind))?;
@@ -74,7 +83,11 @@ impl UsageRecorder {
                 state.interrupted = false;
                 Ok(())
             }
+        };
+        if result.is_ok() {
+            state.last_event_at_ms = Some(at_ms);
         }
+        result
     }
 
     pub fn checkpoint(&self, at: SystemTime) -> Result<(), String> {
@@ -83,6 +96,9 @@ impl UsageRecorder {
         let Some(active) = state.active.clone() else {
             return Ok(());
         };
+        if at_ms <= active.started_at_utc_ms {
+            return Ok(());
+        }
         self.persist(&active, at_ms, "checkpoint")?;
         state.active = Some(new_active(active.subject, at));
         Ok(())
@@ -119,7 +135,7 @@ impl UsageRecorder {
         let Some(active) = state.active.as_ref() else {
             return Ok(());
         };
-        self.persist(active, at_ms, reason)?;
+        self.persist(active, at_ms.max(active.started_at_utc_ms), reason)?;
         state.active = None;
         Ok(())
     }
@@ -337,5 +353,60 @@ mod tests {
         let saved = sessions(&store);
         assert_eq!(saved.len(), 1);
         assert!(saved[0].stable_key.is_none());
+    }
+
+    #[test]
+    fn checkpoint_before_active_boundary_is_ignored() {
+        let (_directory, store, recorder) = fixture();
+        recorder
+            .handle_event(event(
+                10_000,
+                DesktopEventKind::ForegroundChanged,
+                Some("a.exe"),
+            ))
+            .unwrap();
+
+        recorder.checkpoint(system_time_from_ms(9_000)).unwrap();
+        recorder.stop(system_time_from_ms(11_000)).unwrap();
+
+        let saved = sessions(&store);
+        assert_eq!(saved.len(), 1);
+        assert_eq!(
+            (saved[0].started_at_utc_ms, saved[0].ended_at_utc_ms),
+            (10_000, 11_000)
+        );
+    }
+
+    #[test]
+    fn stale_events_do_not_rewind_the_active_subject() {
+        let (_directory, store, recorder) = fixture();
+        recorder
+            .handle_event(event(
+                10_000,
+                DesktopEventKind::ForegroundChanged,
+                Some("a.exe"),
+            ))
+            .unwrap();
+        recorder
+            .handle_event(event(
+                20_000,
+                DesktopEventKind::ForegroundChanged,
+                Some("b.exe"),
+            ))
+            .unwrap();
+
+        recorder
+            .handle_event(event(
+                15_000,
+                DesktopEventKind::ForegroundChanged,
+                Some("c.exe"),
+            ))
+            .unwrap();
+        recorder.stop(system_time_from_ms(30_000)).unwrap();
+
+        let saved = sessions(&store);
+        assert_eq!(saved.len(), 2);
+        assert_eq!(saved[1].display_name.as_deref(), Some("b"));
+        assert_eq!(saved[1].ended_at_utc_ms, 30_000);
     }
 }
