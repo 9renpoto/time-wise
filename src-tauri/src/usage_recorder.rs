@@ -78,6 +78,7 @@ pub struct UsageRecorder {
     sink: Arc<dyn SessionSink>,
     state: Mutex<RecorderState>,
     diagnostics: Mutex<RecorderDiagnostics>,
+    last_event_at_ms: Mutex<Option<u64>>,
 }
 
 impl UsageRecorder {
@@ -91,11 +92,15 @@ impl UsageRecorder {
             sink,
             state: Mutex::new(RecorderState::Idle),
             diagnostics: Mutex::new(RecorderDiagnostics::default()),
+            last_event_at_ms: Mutex::new(None),
         }
     }
 
     pub fn handle_event(&self, event: DesktopEvent) {
         let observed_at_utc_ms = system_time_to_ms(event.observed_at);
+        if !self.accept_event_timestamp(observed_at_utc_ms) {
+            return;
+        }
         match event.kind {
             DesktopEventKind::ForegroundChanged => {
                 self.record_observation_failure(event.failure);
@@ -204,7 +209,7 @@ impl UsageRecorder {
             return;
         };
         if let RecorderState::Recording(active) = &*state {
-            if at_utc_ms < active.started_at_utc_ms {
+            if at_utc_ms <= active.started_at_utc_ms {
                 return;
             }
             self.persist(active, at_utc_ms, reason);
@@ -242,6 +247,17 @@ impl UsageRecorder {
                 diagnostics.observation_failure = Some(failure);
             }
         }
+    }
+
+    fn accept_event_timestamp(&self, at_utc_ms: u64) -> bool {
+        let Ok(mut last_event_at_ms) = self.last_event_at_ms.lock() else {
+            return false;
+        };
+        if last_event_at_ms.is_some_and(|last| at_utc_ms < last) {
+            return false;
+        }
+        *last_event_at_ms = Some(at_utc_ms);
+        true
     }
 }
 
@@ -421,6 +437,42 @@ mod tests {
         assert_eq!(
             diagnostics.observation_failure,
             Some(ObservationFailure::ProcessOpenFailed(5))
+        );
+    }
+
+    #[test]
+    fn stale_events_do_not_rewind_the_active_subject() {
+        let (sink, recorder) = recorder();
+        recorder.handle_event(foreground(10_000, r"C:\Apps\Editor.exe"));
+        recorder.handle_event(foreground(20_000, r"C:\Apps\Browser.exe"));
+        recorder.handle_event(foreground(15_000, r"C:\Apps\Terminal.exe"));
+        recorder.stop(at(30_000));
+
+        let sessions = sink.sessions.lock().unwrap();
+        assert_eq!(sessions.len(), 2);
+        assert_eq!(
+            sessions[1].subject,
+            subject_from_process(&ProcessIdentity {
+                process_id: 42,
+                executable: PathBuf::from(r"C:\Apps\Browser.exe"),
+            })
+        );
+        assert_eq!(sessions[1].ended_at_utc_ms, 30_000);
+    }
+
+    #[test]
+    fn checkpoint_at_or_before_active_boundary_is_ignored() {
+        let (sink, recorder) = recorder();
+        recorder.handle_event(foreground(10_000, r"C:\Apps\Editor.exe"));
+        recorder.checkpoint(at(10_000));
+        recorder.checkpoint(at(9_000));
+        recorder.stop(at(11_000));
+
+        let sessions = sink.sessions.lock().unwrap();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(
+            (sessions[0].started_at_utc_ms, sessions[0].ended_at_utc_ms),
+            (10_000, 11_000)
         );
     }
 }
