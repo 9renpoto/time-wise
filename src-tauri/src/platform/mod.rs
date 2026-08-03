@@ -1,3 +1,5 @@
+#![cfg_attr(not(target_os = "windows"), allow(dead_code))]
+
 use std::path::PathBuf;
 use std::time::SystemTime;
 
