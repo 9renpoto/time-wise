@@ -50,7 +50,10 @@ fn package_display_name(process: &ProcessIdentity) -> Option<&str> {
 }
 
 fn executable_display_name(path: &Path) -> String {
-    path.file_stem()
+    let path = path.to_string_lossy();
+    let file_name = path.rsplit(['\\', '/']).next().unwrap_or_default();
+    Path::new(file_name)
+        .file_stem()
         .and_then(|name| name.to_str())
         .filter(|name| !name.trim().is_empty())
         .unwrap_or("Unknown application")
@@ -128,6 +131,10 @@ mod tests {
 
         assert_eq!(resolve(&upper).stable_key, resolve(&lower).stable_key);
         assert_eq!(resolve(&upper).display_name, "Terminal");
+        assert_eq!(
+            resolve(&process("/opt/apps/Terminal.exe")).display_name,
+            "Terminal"
+        );
         assert_eq!(
             resolve(&upper).icon_source.as_deref(),
             Some(r"C:\Apps\Terminal.exe")
