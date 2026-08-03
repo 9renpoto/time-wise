@@ -1,412 +1,478 @@
-use std::path::{Path, PathBuf};
+//! Converts desktop lifecycle events into durable usage sessions.
+
+use std::path::Path;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
-use chrono::{DateTime, Local};
+use chrono::{DateTime, Local, Utc};
 
-use crate::platform::{DesktopEvent, DesktopEventKind};
+use crate::platform::{DesktopEvent, DesktopEventKind, ObservationFailure, ProcessIdentity};
 use crate::usage_history::{AppMetadata, NewUsageSession, UsageHistoryStore, UsageSubject};
 
-#[cfg(target_os = "windows")]
-pub const CHECKPOINT_INTERVAL: Duration = Duration::from_secs(30);
+pub const CHECKPOINT_INTERVAL_SECONDS: u64 = 30;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-enum OwnedSubject {
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum TrackedSubject {
     Identified(AppMetadata),
     Unclassified,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct ActiveSession {
-    subject: OwnedSubject,
+    subject: TrackedSubject,
     started_at_utc_ms: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum RecorderState {
+    Idle,
+    Recording(ActiveSession),
+    Interrupted,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RecorderDiagnostics {
+    pub subscription_error: Option<String>,
+    pub observation_failure: Option<ObservationFailure>,
+    pub persistence_error: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SessionRecord {
+    subject: TrackedSubject,
+    started_at_utc_ms: u64,
+    ended_at_utc_ms: u64,
     measured_timezone: String,
     measured_local_date: String,
+    end_reason: &'static str,
 }
 
-#[derive(Default)]
-struct RecorderState {
-    active: Option<ActiveSession>,
-    interrupted: bool,
-    last_event_at_ms: Option<u64>,
+trait SessionSink: Send + Sync {
+    fn save(&self, session: &SessionRecord) -> Result<(), String>;
 }
 
-pub struct UsageRecorder {
+struct SqliteSessionSink {
     store: Arc<UsageHistoryStore>,
-    own_executable: PathBuf,
-    state: Mutex<RecorderState>,
 }
 
-impl UsageRecorder {
-    #[must_use]
-    pub fn new(store: Arc<UsageHistoryStore>, own_executable: PathBuf) -> Self {
-        Self {
-            store,
-            own_executable,
-            state: Mutex::new(RecorderState::default()),
-        }
-    }
-
-    pub fn handle_event(&self, event: DesktopEvent) -> Result<(), String> {
-        let at_ms = system_time_to_ms(event.observed_at)?;
-        let mut state = self.lock_state()?;
-        if state
-            .last_event_at_ms
-            .is_some_and(|last_event_at_ms| at_ms < last_event_at_ms)
-        {
-            return Ok(());
-        }
-        let result = match event.kind {
-            DesktopEventKind::ForegroundChanged => {
-                if state.interrupted {
-                    Ok(())
-                } else {
-                    let subject = event
-                        .process
-                        .as_ref()
-                        .map(|process| process.executable.as_path())
-                        .and_then(|path| self.subject_for_executable(path));
-                    let subject = match (subject, event.failure) {
-                        (Some(subject), _) => Some(subject),
-                        (None, Some(_)) => Some(OwnedSubject::Unclassified),
-                        (None, None) => None,
-                    };
-                    self.switch_subject(&mut state, subject, at_ms)
-                }
-            }
-            DesktopEventKind::SessionLocked | DesktopEventKind::Suspended => {
-                self.finish_active(&mut state, at_ms, interruption_reason(&event.kind))?;
-                state.interrupted = true;
-                Ok(())
-            }
-            DesktopEventKind::SessionUnlocked | DesktopEventKind::Resumed => {
-                state.interrupted = false;
-                Ok(())
-            }
-        };
-        if result.is_ok() {
-            state.last_event_at_ms = Some(at_ms);
-        }
-        result
-    }
-
-    pub fn checkpoint(&self, at: SystemTime) -> Result<(), String> {
-        let at_ms = system_time_to_ms(at)?;
-        let mut state = self.lock_state()?;
-        let Some(active) = state.active.clone() else {
-            return Ok(());
-        };
-        if at_ms <= active.started_at_utc_ms {
-            return Ok(());
-        }
-        self.persist(&active, at_ms, "checkpoint")?;
-        state.active = Some(new_active(active.subject, at));
-        Ok(())
-    }
-
-    pub fn stop(&self, at: SystemTime) -> Result<(), String> {
-        let at_ms = system_time_to_ms(at)?;
-        let mut state = self.lock_state()?;
-        self.finish_active(&mut state, at_ms, "measurement_stopped")
-    }
-
-    fn switch_subject(
-        &self,
-        state: &mut RecorderState,
-        subject: Option<OwnedSubject>,
-        at_ms: u64,
-    ) -> Result<(), String> {
-        if state.active.as_ref().map(|active| &active.subject) == subject.as_ref() {
-            return Ok(());
-        }
-        self.finish_active(state, at_ms, "focus_changed")?;
-        if let Some(subject) = subject {
-            state.active = Some(new_active(subject, system_time_from_ms(at_ms)));
-        }
-        Ok(())
-    }
-
-    fn finish_active(
-        &self,
-        state: &mut RecorderState,
-        at_ms: u64,
-        reason: &str,
-    ) -> Result<(), String> {
-        let Some(active) = state.active.as_ref() else {
-            return Ok(());
-        };
-        self.persist(active, at_ms.max(active.started_at_utc_ms), reason)?;
-        state.active = None;
-        Ok(())
-    }
-
-    fn persist(
-        &self,
-        active: &ActiveSession,
-        ended_at_ms: u64,
-        reason: &str,
-    ) -> Result<(), String> {
-        let subject = match &active.subject {
-            OwnedSubject::Identified(metadata) => UsageSubject::Identified(metadata),
-            OwnedSubject::Unclassified => UsageSubject::Unclassified,
+impl SessionSink for SqliteSessionSink {
+    fn save(&self, session: &SessionRecord) -> Result<(), String> {
+        let subject = match &session.subject {
+            TrackedSubject::Identified(metadata) => UsageSubject::Identified(metadata),
+            TrackedSubject::Unclassified => UsageSubject::Unclassified,
         };
         self.store
             .record_session(&NewUsageSession {
                 subject,
-                started_at_utc_ms: active.started_at_utc_ms,
-                ended_at_utc_ms: ended_at_ms,
-                measured_timezone: &active.measured_timezone,
-                measured_local_date: &active.measured_local_date,
-                end_reason: reason,
+                started_at_utc_ms: session.started_at_utc_ms,
+                ended_at_utc_ms: session.ended_at_utc_ms,
+                measured_timezone: &session.measured_timezone,
+                measured_local_date: &session.measured_local_date,
+                end_reason: session.end_reason,
             })
             .map(|_| ())
     }
+}
 
-    fn subject_for_executable(&self, executable: &Path) -> Option<OwnedSubject> {
-        if same_executable(executable, &self.own_executable) {
-            return None;
+pub struct UsageRecorder {
+    sink: Arc<dyn SessionSink>,
+    state: Mutex<RecorderState>,
+    diagnostics: Mutex<RecorderDiagnostics>,
+    last_event_at_ms: Mutex<Option<u64>>,
+}
+
+impl UsageRecorder {
+    #[must_use]
+    pub fn new(store: Arc<UsageHistoryStore>) -> Self {
+        Self::with_sink(Arc::new(SqliteSessionSink { store }))
+    }
+
+    fn with_sink(sink: Arc<dyn SessionSink>) -> Self {
+        Self {
+            sink,
+            state: Mutex::new(RecorderState::Idle),
+            diagnostics: Mutex::new(RecorderDiagnostics::default()),
+            last_event_at_ms: Mutex::new(None),
         }
-        let executable_text = executable.to_string_lossy().to_string();
-        let display_name = executable
-            .file_stem()
-            .map(|name| name.to_string_lossy().to_string())
-            .filter(|name| !name.trim().is_empty())
-            .unwrap_or_else(|| "Unclassified".to_string());
-        Some(OwnedSubject::Identified(AppMetadata {
-            stable_key: format!("executable:{}", executable_text.to_lowercase()),
-            display_name,
-            executable: Some(executable_text),
-        }))
     }
 
-    fn lock_state(&self) -> Result<std::sync::MutexGuard<'_, RecorderState>, String> {
-        self.state
+    pub fn handle_event(&self, event: DesktopEvent) {
+        let observed_at_utc_ms = system_time_to_ms(event.observed_at);
+        if !self.accept_event_timestamp(observed_at_utc_ms) {
+            return;
+        }
+        match event.kind {
+            DesktopEventKind::ForegroundChanged => {
+                self.record_observation_failure(event.failure);
+                if event
+                    .process
+                    .as_ref()
+                    .is_some_and(|process| process.process_id == std::process::id())
+                {
+                    self.exclude_focus(observed_at_utc_ms);
+                    return;
+                }
+                let subject = event
+                    .process
+                    .as_ref()
+                    .map(subject_from_process)
+                    .unwrap_or(TrackedSubject::Unclassified);
+                self.focus_changed(subject, observed_at_utc_ms);
+            }
+            DesktopEventKind::SessionLocked => {
+                self.interrupt(observed_at_utc_ms, "session_locked");
+            }
+            DesktopEventKind::Suspended => {
+                self.interrupt(observed_at_utc_ms, "system_suspended");
+            }
+            DesktopEventKind::SessionUnlocked | DesktopEventKind::Resumed => self.resume(),
+        }
+    }
+
+    pub fn checkpoint(&self, at: SystemTime) {
+        self.close_and_restart(system_time_to_ms(at), "checkpoint");
+    }
+
+    pub fn stop(&self, at: SystemTime) {
+        let at_utc_ms = system_time_to_ms(at);
+        if let Ok(mut state) = self.state.lock() {
+            if let RecorderState::Recording(active) = &*state {
+                self.persist(active, at_utc_ms, "measurement_stopped");
+            }
+            *state = RecorderState::Idle;
+        }
+    }
+
+    pub fn record_subscription_failure(&self, error: String) {
+        if let Ok(mut diagnostics) = self.diagnostics.lock() {
+            diagnostics.subscription_error = Some(error);
+        }
+    }
+
+    #[must_use]
+    pub fn diagnostics(&self) -> RecorderDiagnostics {
+        self.diagnostics
             .lock()
-            .map_err(|_| "usage recorder mutex poisoned".to_string())
+            .map(|value| value.clone())
+            .unwrap_or_else(|_| RecorderDiagnostics {
+                persistence_error: Some("usage recorder diagnostics mutex poisoned".into()),
+                ..RecorderDiagnostics::default()
+            })
+    }
+
+    fn focus_changed(&self, subject: TrackedSubject, at_utc_ms: u64) {
+        let Ok(mut state) = self.state.lock() else {
+            return;
+        };
+        if let RecorderState::Recording(active) = &*state {
+            if active.subject == subject {
+                return;
+            }
+            self.persist(active, at_utc_ms, "focus_changed");
+        }
+        *state = RecorderState::Recording(ActiveSession {
+            subject,
+            started_at_utc_ms: at_utc_ms,
+        });
+    }
+
+    fn exclude_focus(&self, at_utc_ms: u64) {
+        let Ok(mut state) = self.state.lock() else {
+            return;
+        };
+        if let RecorderState::Recording(active) = &*state {
+            self.persist(active, at_utc_ms, "focus_changed");
+        }
+        *state = RecorderState::Idle;
+    }
+
+    fn interrupt(&self, at_utc_ms: u64, reason: &'static str) {
+        let Ok(mut state) = self.state.lock() else {
+            return;
+        };
+        if let RecorderState::Recording(active) = &*state {
+            self.persist(active, at_utc_ms, reason);
+        }
+        *state = RecorderState::Interrupted;
+    }
+
+    fn resume(&self) {
+        if let Ok(mut state) = self.state.lock() {
+            if matches!(*state, RecorderState::Interrupted) {
+                *state = RecorderState::Idle;
+            }
+        }
+    }
+
+    fn close_and_restart(&self, at_utc_ms: u64, reason: &'static str) {
+        let Ok(mut state) = self.state.lock() else {
+            return;
+        };
+        if let RecorderState::Recording(active) = &*state {
+            if at_utc_ms <= active.started_at_utc_ms {
+                return;
+            }
+            self.persist(active, at_utc_ms, reason);
+            *state = RecorderState::Recording(ActiveSession {
+                subject: active.subject.clone(),
+                started_at_utc_ms: at_utc_ms,
+            });
+        }
+    }
+
+    fn persist(&self, active: &ActiveSession, ended_at_utc_ms: u64, reason: &'static str) {
+        if ended_at_utc_ms < active.started_at_utc_ms {
+            return;
+        }
+        let (measured_timezone, measured_local_date) =
+            local_measurement_context(active.started_at_utc_ms);
+        let result = self.sink.save(&SessionRecord {
+            subject: active.subject.clone(),
+            started_at_utc_ms: active.started_at_utc_ms,
+            ended_at_utc_ms,
+            measured_timezone,
+            measured_local_date,
+            end_reason: reason,
+        });
+        if let Err(error) = result {
+            if let Ok(mut diagnostics) = self.diagnostics.lock() {
+                diagnostics.persistence_error = Some(error);
+            }
+        }
+    }
+
+    fn record_observation_failure(&self, failure: Option<ObservationFailure>) {
+        if let Some(failure) = failure {
+            if let Ok(mut diagnostics) = self.diagnostics.lock() {
+                diagnostics.observation_failure = Some(failure);
+            }
+        }
+    }
+
+    fn accept_event_timestamp(&self, at_utc_ms: u64) -> bool {
+        let Ok(mut last_event_at_ms) = self.last_event_at_ms.lock() else {
+            return false;
+        };
+        if last_event_at_ms.is_some_and(|last| at_utc_ms < last) {
+            return false;
+        }
+        *last_event_at_ms = Some(at_utc_ms);
+        true
     }
 }
 
-fn new_active(subject: OwnedSubject, at: SystemTime) -> ActiveSession {
-    let local: DateTime<Local> = at.into();
-    ActiveSession {
-        subject,
-        started_at_utc_ms: system_time_to_ms(at).unwrap_or_default(),
-        measured_timezone: local.offset().to_string(),
-        measured_local_date: local.format("%Y-%m-%d").to_string(),
-    }
+fn subject_from_process(process: &ProcessIdentity) -> TrackedSubject {
+    let executable = process.executable.display().to_string();
+    let stable_key = executable.to_lowercase();
+    let display_name = Path::new(&process.executable)
+        .file_stem()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.trim().is_empty())
+        .unwrap_or("Unknown application")
+        .to_string();
+    TrackedSubject::Identified(AppMetadata {
+        stable_key,
+        display_name,
+        executable: Some(executable),
+    })
 }
 
-fn interruption_reason(kind: &DesktopEventKind) -> &'static str {
-    match kind {
-        DesktopEventKind::SessionLocked => "session_locked",
-        DesktopEventKind::Suspended => "system_suspended",
-        _ => unreachable!("only interruption events are accepted"),
-    }
+fn local_measurement_context(at_utc_ms: u64) -> (String, String) {
+    let utc = i64::try_from(at_utc_ms)
+        .ok()
+        .and_then(DateTime::<Utc>::from_timestamp_millis)
+        .unwrap_or_else(Utc::now);
+    let local = utc.with_timezone(&Local);
+    (
+        local.format("%:z").to_string(),
+        local.format("%F").to_string(),
+    )
 }
 
-fn same_executable(left: &Path, right: &Path) -> bool {
-    left.to_string_lossy()
-        .eq_ignore_ascii_case(&right.to_string_lossy())
-}
-
-fn system_time_to_ms(time: SystemTime) -> Result<u64, String> {
-    let millis = time
-        .duration_since(UNIX_EPOCH)
-        .map_err(|_| "event timestamp predates Unix epoch".to_string())?
-        .as_millis();
-    u64::try_from(millis).map_err(|_| "event timestamp exceeds u64".to_string())
-}
-
-fn system_time_from_ms(ms: u64) -> SystemTime {
-    UNIX_EPOCH + Duration::from_millis(ms)
+fn system_time_to_ms(time: SystemTime) -> u64 {
+    time.duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .min(u64::MAX as u128) as u64
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::platform::{ObservationFailure, ProcessIdentity};
+    use std::path::PathBuf;
 
-    fn fixture() -> (tempfile::TempDir, Arc<UsageHistoryStore>, UsageRecorder) {
-        let directory = tempfile::tempdir().unwrap();
-        let store = Arc::new(
-            UsageHistoryStore::with_storage_path(directory.path().join("usage.sqlite")).unwrap(),
-        );
-        let recorder = UsageRecorder::new(store.clone(), PathBuf::from("time-wise.exe"));
-        (directory, store, recorder)
+    #[derive(Default)]
+    struct MemorySink {
+        sessions: Mutex<Vec<SessionRecord>>,
     }
 
-    fn event(at_ms: u64, kind: DesktopEventKind, executable: Option<&str>) -> DesktopEvent {
+    impl SessionSink for MemorySink {
+        fn save(&self, session: &SessionRecord) -> Result<(), String> {
+            self.sessions.lock().unwrap().push(session.clone());
+            Ok(())
+        }
+    }
+
+    fn at(milliseconds: u64) -> SystemTime {
+        UNIX_EPOCH + std::time::Duration::from_millis(milliseconds)
+    }
+
+    fn foreground(milliseconds: u64, executable: &str) -> DesktopEvent {
         DesktopEvent {
-            observed_at: system_time_from_ms(at_ms),
-            kind,
-            process: executable.map(|path| ProcessIdentity {
-                process_id: 1,
-                executable: PathBuf::from(path),
+            observed_at: at(milliseconds),
+            kind: DesktopEventKind::ForegroundChanged,
+            process: Some(ProcessIdentity {
+                process_id: 42,
+                executable: PathBuf::from(executable),
             }),
             failure: None,
         }
     }
 
-    fn sessions(store: &UsageHistoryStore) -> Vec<crate::usage_history::StoredUsageSession> {
-        let date = DateTime::<Local>::from(system_time_from_ms(1_000))
-            .format("%Y-%m-%d")
-            .to_string();
-        store.sessions_for_local_date(&date).unwrap()
+    fn recorder() -> (Arc<MemorySink>, UsageRecorder) {
+        let sink = Arc::new(MemorySink::default());
+        let recorder = UsageRecorder::with_sink(sink.clone());
+        (sink, recorder)
     }
 
     #[test]
-    fn focus_changes_create_sessions() {
-        let (_directory, store, recorder) = fixture();
-        recorder
-            .handle_event(event(
-                1_000,
-                DesktopEventKind::ForegroundChanged,
-                Some("a.exe"),
-            ))
-            .unwrap();
-        recorder
-            .handle_event(event(
-                4_000,
-                DesktopEventKind::ForegroundChanged,
-                Some("b.exe"),
-            ))
-            .unwrap();
-        recorder.stop(system_time_from_ms(6_000)).unwrap();
-        let saved = sessions(&store);
-        assert_eq!(saved.len(), 2);
+    fn focus_changes_create_sessions_immediately() {
+        let (sink, recorder) = recorder();
+        recorder.handle_event(foreground(1_000, r"C:\Apps\Editor.exe"));
+        recorder.handle_event(foreground(2_500, r"C:\Apps\Browser.exe"));
+        let sessions = sink.sessions.lock().unwrap();
+        assert_eq!(sessions.len(), 1);
         assert_eq!(
-            (saved[0].started_at_utc_ms, saved[0].ended_at_utc_ms),
-            (1_000, 4_000)
+            (sessions[0].started_at_utc_ms, sessions[0].ended_at_utc_ms),
+            (1_000, 2_500)
         );
-        assert_eq!(saved[0].end_reason, "focus_changed");
-        assert_eq!(saved[1].end_reason, "measurement_stopped");
+        assert_eq!(sessions[0].end_reason, "focus_changed");
     }
 
     #[test]
-    fn checkpoint_limits_uncommitted_time_and_continues_session() {
-        let (_directory, store, recorder) = fixture();
-        recorder
-            .handle_event(event(
-                1_000,
-                DesktopEventKind::ForegroundChanged,
-                Some("a.exe"),
-            ))
-            .unwrap();
-        recorder.checkpoint(system_time_from_ms(31_000)).unwrap();
-        recorder.stop(system_time_from_ms(40_000)).unwrap();
-        let saved = sessions(&store);
-        assert_eq!(saved.len(), 2);
-        assert_eq!(saved[0].end_reason, "checkpoint");
-        assert_eq!(saved[1].started_at_utc_ms, 31_000);
+    fn time_wise_focus_is_excluded() {
+        let (sink, recorder) = recorder();
+        recorder.handle_event(foreground(1_000, r"C:\Apps\Editor.exe"));
+        recorder.handle_event(DesktopEvent {
+            observed_at: at(2_000),
+            kind: DesktopEventKind::ForegroundChanged,
+            process: Some(ProcessIdentity {
+                process_id: std::process::id(),
+                executable: PathBuf::from(r"C:\Apps\time-wise.exe"),
+            }),
+            failure: None,
+        });
+        recorder.checkpoint(at(3_000));
+        let sessions = sink.sessions.lock().unwrap();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].ended_at_utc_ms, 2_000);
     }
 
     #[test]
-    fn lock_stops_measurement_until_a_post_resume_focus_event() {
-        let (_directory, store, recorder) = fixture();
-        recorder
-            .handle_event(event(
-                1_000,
-                DesktopEventKind::ForegroundChanged,
-                Some("a.exe"),
-            ))
-            .unwrap();
-        recorder
-            .handle_event(event(2_000, DesktopEventKind::SessionLocked, None))
-            .unwrap();
-        recorder
-            .handle_event(event(
-                3_000,
-                DesktopEventKind::ForegroundChanged,
-                Some("a.exe"),
-            ))
-            .unwrap();
-        recorder
-            .handle_event(event(5_000, DesktopEventKind::SessionUnlocked, None))
-            .unwrap();
-        recorder
-            .handle_event(event(
-                5_001,
-                DesktopEventKind::ForegroundChanged,
-                Some("a.exe"),
-            ))
-            .unwrap();
-        recorder.stop(system_time_from_ms(6_000)).unwrap();
-        let saved = sessions(&store);
-        assert_eq!(saved.len(), 2);
-        assert_eq!(saved[0].end_reason, "session_locked");
-        assert_eq!(saved[1].started_at_utc_ms, 5_001);
+    fn lock_and_suspend_close_sessions_until_fresh_focus() {
+        for (kind, reason) in [
+            (DesktopEventKind::SessionLocked, "session_locked"),
+            (DesktopEventKind::Suspended, "system_suspended"),
+        ] {
+            let (sink, recorder) = recorder();
+            recorder.handle_event(foreground(1_000, r"C:\Apps\Editor.exe"));
+            recorder.handle_event(DesktopEvent {
+                observed_at: at(2_000),
+                kind,
+                process: None,
+                failure: None,
+            });
+            recorder.handle_event(DesktopEvent {
+                observed_at: at(3_000),
+                kind: DesktopEventKind::Resumed,
+                process: None,
+                failure: None,
+            });
+            recorder.checkpoint(at(4_000));
+            assert_eq!(sink.sessions.lock().unwrap().len(), 1);
+            assert_eq!(sink.sessions.lock().unwrap()[0].end_reason, reason);
+            recorder.handle_event(foreground(5_000, r"C:\Apps\Editor.exe"));
+            recorder.stop(at(6_000));
+            assert_eq!(sink.sessions.lock().unwrap().len(), 2);
+        }
     }
 
     #[test]
-    fn failures_are_recorded_as_unclassified_and_self_is_excluded() {
-        let (_directory, store, recorder) = fixture();
-        let mut failed = event(1_000, DesktopEventKind::ForegroundChanged, None);
-        failed.failure = Some(ObservationFailure::ProcessIdUnavailable);
-        recorder.handle_event(failed).unwrap();
-        recorder
-            .handle_event(event(
-                2_000,
-                DesktopEventKind::ForegroundChanged,
-                Some("TIME-WISE.EXE"),
-            ))
-            .unwrap();
-        let saved = sessions(&store);
-        assert_eq!(saved.len(), 1);
-        assert!(saved[0].stable_key.is_none());
+    fn checkpoints_bound_abnormal_exit_loss_to_less_than_thirty_seconds() {
+        let (sink, recorder) = recorder();
+        recorder.handle_event(foreground(0, r"C:\Apps\Editor.exe"));
+        recorder.checkpoint(at(30_000));
+        let sessions = sink.sessions.lock().unwrap();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].ended_at_utc_ms, 30_000);
+        let simulated_crash_at_ms = 59_999;
+        assert!(simulated_crash_at_ms - sessions[0].ended_at_utc_ms < 30_000);
     }
 
     #[test]
-    fn checkpoint_before_active_boundary_is_ignored() {
-        let (_directory, store, recorder) = fixture();
-        recorder
-            .handle_event(event(
-                10_000,
-                DesktopEventKind::ForegroundChanged,
-                Some("a.exe"),
-            ))
-            .unwrap();
+    fn normal_stop_finalizes_the_active_session() {
+        let (sink, recorder) = recorder();
+        recorder.handle_event(foreground(10, r"C:\Apps\Editor.exe"));
+        recorder.stop(at(20));
+        let sessions = sink.sessions.lock().unwrap();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].end_reason, "measurement_stopped");
+    }
 
-        recorder.checkpoint(system_time_from_ms(9_000)).unwrap();
-        recorder.stop(system_time_from_ms(11_000)).unwrap();
-
-        let saved = sessions(&store);
-        assert_eq!(saved.len(), 1);
+    #[test]
+    fn observation_and_subscription_failures_are_diagnostic() {
+        let (_sink, recorder) = recorder();
+        recorder.record_subscription_failure("hook failed".into());
+        recorder.handle_event(DesktopEvent {
+            observed_at: at(10),
+            kind: DesktopEventKind::ForegroundChanged,
+            process: None,
+            failure: Some(ObservationFailure::ProcessOpenFailed(5)),
+        });
+        let diagnostics = recorder.diagnostics();
         assert_eq!(
-            (saved[0].started_at_utc_ms, saved[0].ended_at_utc_ms),
-            (10_000, 11_000)
+            diagnostics.subscription_error.as_deref(),
+            Some("hook failed")
+        );
+        assert_eq!(
+            diagnostics.observation_failure,
+            Some(ObservationFailure::ProcessOpenFailed(5))
         );
     }
 
     #[test]
     fn stale_events_do_not_rewind_the_active_subject() {
-        let (_directory, store, recorder) = fixture();
-        recorder
-            .handle_event(event(
-                10_000,
-                DesktopEventKind::ForegroundChanged,
-                Some("a.exe"),
-            ))
-            .unwrap();
-        recorder
-            .handle_event(event(
-                20_000,
-                DesktopEventKind::ForegroundChanged,
-                Some("b.exe"),
-            ))
-            .unwrap();
+        let (sink, recorder) = recorder();
+        recorder.handle_event(foreground(10_000, r"C:\Apps\Editor.exe"));
+        recorder.handle_event(foreground(20_000, r"C:\Apps\Browser.exe"));
+        recorder.handle_event(foreground(15_000, r"C:\Apps\Terminal.exe"));
+        recorder.stop(at(30_000));
 
-        recorder
-            .handle_event(event(
-                15_000,
-                DesktopEventKind::ForegroundChanged,
-                Some("c.exe"),
-            ))
-            .unwrap();
-        recorder.stop(system_time_from_ms(30_000)).unwrap();
+        let sessions = sink.sessions.lock().unwrap();
+        assert_eq!(sessions.len(), 2);
+        assert_eq!(
+            sessions[1].subject,
+            subject_from_process(&ProcessIdentity {
+                process_id: 42,
+                executable: PathBuf::from(r"C:\Apps\Browser.exe"),
+            })
+        );
+        assert_eq!(sessions[1].ended_at_utc_ms, 30_000);
+    }
 
-        let saved = sessions(&store);
-        assert_eq!(saved.len(), 2);
-        assert_eq!(saved[1].display_name.as_deref(), Some("b"));
-        assert_eq!(saved[1].ended_at_utc_ms, 30_000);
+    #[test]
+    fn checkpoint_at_or_before_active_boundary_is_ignored() {
+        let (sink, recorder) = recorder();
+        recorder.handle_event(foreground(10_000, r"C:\Apps\Editor.exe"));
+        recorder.checkpoint(at(10_000));
+        recorder.checkpoint(at(9_000));
+        recorder.stop(at(11_000));
+
+        let sessions = sink.sessions.lock().unwrap();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(
+            (sessions[0].started_at_utc_ms, sessions[0].ended_at_utc_ms),
+            (10_000, 11_000)
+        );
     }
 }

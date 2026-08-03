@@ -37,13 +37,9 @@ static EVENT_SENDER: OnceLock<Mutex<Option<mpsc::Sender<DesktopEvent>>>> = OnceL
 pub struct EventProbe {
     observer_thread_id: u32,
     observer: Option<JoinHandle<()>>,
-    logger: Option<JoinHandle<()>>,
 }
 
-pub fn start_event_probe<F>(handler: F) -> Result<EventProbe, String>
-where
-    F: Fn(DesktopEvent) + Send + 'static,
-{
+pub fn start_event_probe() -> Result<(EventProbe, mpsc::Receiver<DesktopEvent>), String> {
     let (event_sender, event_receiver) = mpsc::channel();
     set_event_sender(Some(event_sender.clone()));
 
@@ -72,28 +68,13 @@ where
         }
     };
 
-    let logger = match thread::Builder::new()
-        .name("windows-event-probe-logger".to_string())
-        .spawn(move || {
-            while let Ok(event) = event_receiver.recv() {
-                handler(event);
-            }
-        }) {
-        Ok(logger) => logger,
-        Err(err) => {
-            // SAFETY: observer_thread_id was reported by the running message-loop thread.
-            let _ =
-                unsafe { PostThreadMessageW(observer_thread_id, WM_QUIT, WPARAM(0), LPARAM(0)) };
-            let _ = observer.join();
-            return Err(format!("failed to spawn Windows event logger: {err}"));
-        }
-    };
-
-    Ok(EventProbe {
-        observer_thread_id,
-        observer: Some(observer),
-        logger: Some(logger),
-    })
+    Ok((
+        EventProbe {
+            observer_thread_id,
+            observer: Some(observer),
+        },
+        event_receiver,
+    ))
 }
 
 impl Drop for EventProbe {
@@ -103,9 +84,6 @@ impl Drop for EventProbe {
             unsafe { PostThreadMessageW(self.observer_thread_id, WM_QUIT, WPARAM(0), LPARAM(0)) };
         if let Some(observer) = self.observer.take() {
             let _ = observer.join();
-        }
-        if let Some(logger) = self.logger.take() {
-            let _ = logger.join();
         }
     }
 }
