@@ -27,7 +27,7 @@ pub fn Onboarding(on_complete: Callback<()>) -> impl IntoView {
                     <div>
                         <h2>"Choose automatic launch"</h2>
                         <p>
-                            "Time Wise measures usage while it is running in the system tray. Choose whether it should start when you sign in to Windows."
+                            "Time Wise measures usage while it is running in the system tray. Choose whether it should start when you sign in to your computer."
                         </p>
                     </div>
                 </div>

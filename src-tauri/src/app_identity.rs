@@ -1,4 +1,4 @@
-//! Resolves observed Windows processes to product-level application identities.
+//! Resolves observed desktop processes to product-level application identities.
 
 use std::path::Path;
 
@@ -18,8 +18,11 @@ pub fn resolve(process: &ProcessIdentity) -> AppMetadata {
         .map(str::to_owned)
         .unwrap_or_else(|| executable_display_name(&process.executable));
 
-    let stable_key = if let Some(package_family) = non_empty(process.package_family_name.as_deref())
+    let stable_key = if let Some(bundle_identifier) =
+        non_empty(process.bundle_identifier.as_deref())
     {
+        format!("macos-bundle:{}", normalize_key_part(bundle_identifier))
+    } else if let Some(package_family) = non_empty(process.package_family_name.as_deref()) {
         format!("windows-package:{}", normalize_key_part(package_family))
     } else if let Some(product_name) = non_empty(process.product_name.as_deref()) {
         let publisher = non_empty(process.company_name.as_deref()).unwrap_or("unknown-publisher");
@@ -36,8 +39,8 @@ pub fn resolve(process: &ProcessIdentity) -> AppMetadata {
         stable_key,
         display_name,
         executable: Some(executable.clone()),
-        // The dashboard can ask Windows Shell for the representative icon from
-        // this source without persisting a window title or other user content.
+        // Platform adapters can use the executable as an icon source without
+        // persisting a window title or other user content.
         icon_source: Some(executable),
         icon_png: process.icon_png.clone(),
     }
@@ -80,7 +83,12 @@ fn normalize_key_part(value: &str) -> String {
 }
 
 fn normalize_path(value: &str) -> String {
-    value.trim().replace('/', "\\").to_lowercase()
+    let value = value.trim();
+    if value.contains('\\') || value.to_ascii_lowercase().ends_with(".exe") {
+        value.replace('/', "\\").to_lowercase()
+    } else {
+        value.to_string()
+    }
 }
 
 #[cfg(test)]
@@ -139,5 +147,23 @@ mod tests {
             resolve(&upper).icon_source.as_deref(),
             Some(r"C:\Apps\Terminal.exe")
         );
+    }
+
+    #[test]
+    fn macos_bundle_identifier_groups_bundle_executables() {
+        let mut editor = process("/Applications/Editor.app/Contents/MacOS/Editor");
+        editor.bundle_identifier = Some("com.example.Editor".into());
+        editor.product_name = Some("Editor".into());
+
+        let mut helper = process("/Applications/Editor.app/Contents/Frameworks/Helper");
+        helper.bundle_identifier = editor.bundle_identifier.clone();
+        helper.product_name = editor.product_name.clone();
+
+        assert_eq!(
+            resolve(&editor).stable_key,
+            "macos-bundle:com.example.editor"
+        );
+        assert_eq!(resolve(&editor).stable_key, resolve(&helper).stable_key);
+        assert_eq!(resolve(&editor).display_name, "Editor");
     }
 }

@@ -1,4 +1,4 @@
-//! Leptos components for the Windows v1 usage dashboard.
+//! Leptos components for the desktop usage dashboard.
 
 use leptos::prelude::*;
 use leptos::task::spawn_local;
