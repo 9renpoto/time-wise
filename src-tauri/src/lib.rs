@@ -1,3 +1,4 @@
+mod app_identity;
 mod app_usage;
 mod platform;
 mod startup_metrics;

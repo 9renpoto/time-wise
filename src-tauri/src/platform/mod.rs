@@ -22,10 +22,15 @@ pub enum DesktopEventKind {
     Resumed,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ProcessIdentity {
     pub process_id: u32,
     pub executable: PathBuf,
+    pub package_family_name: Option<String>,
+    pub application_user_model_id: Option<String>,
+    pub product_name: Option<String>,
+    pub company_name: Option<String>,
+    pub icon_png: Option<Vec<u8>>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

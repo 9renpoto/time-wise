@@ -8,6 +8,8 @@ pub struct AppMetadata {
     pub stable_key: String,
     pub display_name: String,
     pub executable: Option<String>,
+    pub icon_source: Option<String>,
+    pub icon_png: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -31,6 +33,8 @@ pub struct StoredUsageSession {
     pub stable_key: Option<String>,
     pub display_name: Option<String>,
     pub executable: Option<String>,
+    pub icon_source: Option<String>,
+    pub icon_png: Option<Vec<u8>>,
     pub started_at_utc_ms: u64,
     pub ended_at_utc_ms: u64,
     pub measured_timezone: String,
@@ -69,6 +73,8 @@ impl UsageHistoryStore {
                 stable_key TEXT NOT NULL UNIQUE,
                 display_name TEXT NOT NULL,
                 executable TEXT,
+                icon_source TEXT,
+                icon_png BLOB,
                 updated_at_utc_ms INTEGER NOT NULL
             );
             CREATE TABLE IF NOT EXISTS usage_sessions (
@@ -99,7 +105,35 @@ impl UsageHistoryStore {
             INSERT OR IGNORE INTO schema_migrations (version, applied_at_utc_ms)
                 VALUES (1, CAST(unixepoch('subsec') * 1000 AS INTEGER));
             COMMIT;",
-        )
+        )?;
+
+        Self::ensure_app_metadata_column(connection, "icon_source", "TEXT", 2)?;
+        Self::ensure_app_metadata_column(connection, "icon_png", "BLOB", 3)?;
+        Ok(())
+    }
+
+    fn ensure_app_metadata_column(
+        connection: &Connection,
+        column: &str,
+        sql_type: &str,
+        version: i64,
+    ) -> rusqlite::Result<()> {
+        let columns = connection
+            .prepare("PRAGMA table_info(app_identities)")?
+            .query_map([], |row| row.get::<_, String>(1))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        if !columns.iter().any(|existing| existing == column) {
+            connection.execute(
+                &format!("ALTER TABLE app_identities ADD COLUMN {column} {sql_type}"),
+                [],
+            )?;
+        }
+        connection.execute(
+            "INSERT OR IGNORE INTO schema_migrations (version, applied_at_utc_ms)
+                VALUES (?1, CAST(unixepoch('subsec') * 1000 AS INTEGER))",
+            [version],
+        )?;
+        Ok(())
     }
 
     pub fn record_session(&self, session: &NewUsageSession<'_>) -> Result<i64, String> {
@@ -151,16 +185,27 @@ impl UsageHistoryStore {
     ) -> Result<i64, String> {
         non_empty("stable key", &metadata.stable_key)?;
         non_empty("display name", &metadata.display_name)?;
-        transaction.execute(
-            "INSERT INTO app_identities (stable_key, display_name, executable, updated_at_utc_ms)
-             VALUES (?1, ?2, ?3, ?4)
+        transaction
+            .execute(
+                "INSERT INTO app_identities (
+                stable_key, display_name, executable, icon_source, icon_png, updated_at_utc_ms
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
              ON CONFLICT(stable_key) DO UPDATE SET
                 display_name = excluded.display_name,
                 executable = excluded.executable,
+                icon_source = COALESCE(excluded.icon_source, app_identities.icon_source),
+                icon_png = COALESCE(excluded.icon_png, app_identities.icon_png),
                 updated_at_utc_ms = excluded.updated_at_utc_ms",
-            params![metadata.stable_key, metadata.display_name, metadata.executable,
-                sql_timestamp(updated_at_utc_ms)?],
-        ).map_err(|error| error.to_string())?;
+                params![
+                    metadata.stable_key,
+                    metadata.display_name,
+                    metadata.executable,
+                    metadata.icon_source,
+                    metadata.icon_png,
+                    sql_timestamp(updated_at_utc_ms)?
+                ],
+            )
+            .map_err(|error| error.to_string())?;
         transaction
             .query_row(
                 "SELECT id FROM app_identities WHERE stable_key = ?1",
@@ -177,7 +222,8 @@ impl UsageHistoryStore {
             .map_err(|_| "usage history mutex poisoned".to_string())?;
         let mut statement = connection
             .prepare(
-                "SELECT apps.stable_key, apps.display_name, apps.executable,
+                "SELECT apps.stable_key, apps.display_name, apps.executable, apps.icon_source,
+                apps.icon_png,
                 sessions.started_at_utc_ms, sessions.ended_at_utc_ms,
                 sessions.measured_timezone, sessions.measured_local_date, sessions.end_reason
              FROM usage_sessions AS sessions
@@ -192,11 +238,13 @@ impl UsageHistoryStore {
                     stable_key: row.get(0)?,
                     display_name: row.get(1)?,
                     executable: row.get(2)?,
-                    started_at_utc_ms: row.get::<_, i64>(3)?.max(0) as u64,
-                    ended_at_utc_ms: row.get::<_, i64>(4)?.max(0) as u64,
-                    measured_timezone: row.get(5)?,
-                    measured_local_date: row.get(6)?,
-                    end_reason: row.get(7)?,
+                    icon_source: row.get(3)?,
+                    icon_png: row.get(4)?,
+                    started_at_utc_ms: row.get::<_, i64>(5)?.max(0) as u64,
+                    ended_at_utc_ms: row.get::<_, i64>(6)?.max(0) as u64,
+                    measured_timezone: row.get(7)?,
+                    measured_local_date: row.get(8)?,
+                    end_reason: row.get(9)?,
                 })
             })
             .map_err(|error| error.to_string())?;
@@ -276,6 +324,8 @@ mod tests {
             stable_key: "product:editor".into(),
             display_name: "Editor".into(),
             executable: Some("editor.exe".into()),
+            icon_source: Some("editor.exe".into()),
+            icon_png: Some(vec![137, 80, 78, 71]),
         };
         store
             .record_session(&NewUsageSession {
@@ -301,6 +351,11 @@ mod tests {
         assert_eq!(sessions.len(), 2);
         assert_eq!(sessions[0].stable_key.as_deref(), Some("product:editor"));
         assert_eq!(sessions[0].display_name.as_deref(), Some("Editor"));
+        assert_eq!(sessions[0].icon_source.as_deref(), Some("editor.exe"));
+        assert_eq!(
+            sessions[0].icon_png.as_deref(),
+            Some([137, 80, 78, 71].as_slice())
+        );
         assert_eq!(sessions[1].stable_key, None);
     }
 
@@ -311,11 +366,15 @@ mod tests {
             stable_key: "product:browser".into(),
             display_name: "Old Name".into(),
             executable: None,
+            icon_source: None,
+            icon_png: None,
         };
         let updated = AppMetadata {
             stable_key: "product:browser".into(),
             display_name: "Browser".into(),
             executable: Some("browser.exe".into()),
+            icon_source: Some("browser.exe".into()),
+            icon_png: Some(vec![1, 2, 3]),
         };
         for (app, start) in [(&first, 10), (&updated, 20)] {
             store
@@ -336,6 +395,9 @@ mod tests {
         assert!(sessions
             .iter()
             .all(|session| session.executable.as_deref() == Some("browser.exe")));
+        assert!(sessions
+            .iter()
+            .all(|session| session.icon_png.as_deref() == Some([1, 2, 3].as_slice())));
     }
 
     #[test]
@@ -344,6 +406,42 @@ mod tests {
         store.set_setting("autostart", "false", 10).unwrap();
         store.set_setting("autostart", "true", 20).unwrap();
         assert_eq!(store.setting("autostart").unwrap().as_deref(), Some("true"));
+    }
+
+    #[test]
+    fn migrates_existing_identity_metadata_cache() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("usage.sqlite");
+        let connection = Connection::open(&path).unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE schema_migrations (
+                    version INTEGER PRIMARY KEY,
+                    applied_at_utc_ms INTEGER NOT NULL
+                );
+                CREATE TABLE app_identities (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    stable_key TEXT NOT NULL UNIQUE,
+                    display_name TEXT NOT NULL,
+                    executable TEXT,
+                    updated_at_utc_ms INTEGER NOT NULL
+                );
+                INSERT INTO schema_migrations VALUES (1, 0);",
+            )
+            .unwrap();
+        drop(connection);
+
+        let store = UsageHistoryStore::with_storage_path(path).unwrap();
+        let connection = store.connection.lock().unwrap();
+        let columns = connection
+            .prepare("PRAGMA table_info(app_identities)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap();
+        assert!(columns.iter().any(|column| column == "icon_source"));
+        assert!(columns.iter().any(|column| column == "icon_png"));
     }
 
     #[test]

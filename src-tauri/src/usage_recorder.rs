@@ -1,12 +1,14 @@
 //! Converts desktop lifecycle events into durable usage sessions.
 
-use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, Local, Utc};
 
-use crate::platform::{DesktopEvent, DesktopEventKind, ObservationFailure, ProcessIdentity};
+use crate::app_identity;
+#[cfg(test)]
+use crate::platform::ProcessIdentity;
+use crate::platform::{DesktopEvent, DesktopEventKind, ObservationFailure};
 use crate::usage_history::{AppMetadata, NewUsageSession, UsageHistoryStore, UsageSubject};
 
 pub const CHECKPOINT_INTERVAL_SECONDS: u64 = 30;
@@ -115,7 +117,7 @@ impl UsageRecorder {
                 let subject = event
                     .process
                     .as_ref()
-                    .map(subject_from_process)
+                    .map(|process| TrackedSubject::Identified(app_identity::resolve(process)))
                     .unwrap_or(TrackedSubject::Unclassified);
                 self.focus_changed(subject, observed_at_utc_ms);
             }
@@ -261,22 +263,6 @@ impl UsageRecorder {
     }
 }
 
-fn subject_from_process(process: &ProcessIdentity) -> TrackedSubject {
-    let executable = process.executable.display().to_string();
-    let stable_key = executable.to_lowercase();
-    let display_name = Path::new(&process.executable)
-        .file_stem()
-        .and_then(|name| name.to_str())
-        .filter(|name| !name.trim().is_empty())
-        .unwrap_or("Unknown application")
-        .to_string();
-    TrackedSubject::Identified(AppMetadata {
-        stable_key,
-        display_name,
-        executable: Some(executable),
-    })
-}
-
 fn local_measurement_context(at_utc_ms: u64) -> (String, String) {
     let utc = i64::try_from(at_utc_ms)
         .ok()
@@ -324,6 +310,7 @@ mod tests {
             process: Some(ProcessIdentity {
                 process_id: 42,
                 executable: PathBuf::from(executable),
+                ..ProcessIdentity::default()
             }),
             failure: None,
         }
@@ -359,6 +346,7 @@ mod tests {
             process: Some(ProcessIdentity {
                 process_id: std::process::id(),
                 executable: PathBuf::from(r"C:\Apps\time-wise.exe"),
+                ..ProcessIdentity::default()
             }),
             failure: None,
         });
@@ -452,10 +440,11 @@ mod tests {
         assert_eq!(sessions.len(), 2);
         assert_eq!(
             sessions[1].subject,
-            subject_from_process(&ProcessIdentity {
+            TrackedSubject::Identified(app_identity::resolve(&ProcessIdentity {
                 process_id: 42,
                 executable: PathBuf::from(r"C:\Apps\Browser.exe"),
-            })
+                ..ProcessIdentity::default()
+            }))
         );
         assert_eq!(sessions[1].ended_at_utc_ms, 30_000);
     }
