@@ -117,6 +117,7 @@ pub async fn set_autostart_enabled(enabled: bool) -> AutostartStatus {
     }
 }
 
+#[allow(dead_code)]
 pub async fn load_startup_records() -> Vec<StartupRecord> {
     match invoke_command::<Vec<StartupRecord>>("fetch_startup_records").await {
         Ok(mut records) => {
@@ -130,6 +131,7 @@ pub async fn load_startup_records() -> Vec<StartupRecord> {
     }
 }
 
+#[allow(dead_code)]
 pub async fn load_app_usage_records() -> Result<Vec<AppUsageRecord>, String> {
     match invoke_command::<Vec<AppUsageRecord>>("fetch_app_usage_records").await {
         Ok(mut records) => {
@@ -143,7 +145,6 @@ pub async fn load_app_usage_records() -> Result<Vec<AppUsageRecord>, String> {
     }
 }
 
-#[allow(dead_code)]
 pub async fn load_daily_usage_summary(local_date: &str) -> Result<DailyUsageSummary, String> {
     let payload = serde_wasm_bindgen::to_value(&UsageDatePayload { local_date })
         .map_err(|error| error.to_string())?;
@@ -155,7 +156,6 @@ pub async fn load_daily_usage_summary(local_date: &str) -> Result<DailyUsageSumm
         })
 }
 
-#[allow(dead_code)]
 pub async fn load_weekly_usage_summary(local_date: &str) -> Result<WeeklyUsageSummary, String> {
     let payload = serde_wasm_bindgen::to_value(&UsageDatePayload { local_date })
         .map_err(|error| error.to_string())?;

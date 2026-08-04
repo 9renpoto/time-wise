@@ -1,390 +1,460 @@
-//! Leptos component definitions that render startup metrics fetched from the Tauri backend.
+//! Leptos components for the Windows v1 usage dashboard.
 
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use wasm_bindgen::closure::Closure;
-use wasm_bindgen::{JsCast, JsValue};
-use web_sys::{console, window};
+use wasm_bindgen::JsCast;
+use web_sys::window;
 
-use crate::application::startup_service::{
-    compute_category_summary, compute_chart_points, compute_tiles, format_duration,
-    format_duration_compact, format_timestamp, format_total_duration,
+use crate::application::usage_dashboard::{
+    format_axis_duration, format_date_label, format_usage_duration, icon_data_url,
+    shift_local_date, usage_bar_height,
 };
-use crate::application::usage_service::{
-    active_app_count, compute_usage_tiles, latest_usage_timestamp,
-};
-use crate::domain::{app_usage_record::AppUsageRecord, startup_record::StartupRecord};
-use crate::infrastructure::tauri_adapter::{load_app_usage_records, load_startup_records};
+use crate::domain::usage_summary::{AppUsageTotal, DailyUsageSummary, WeeklyUsageSummary};
+use crate::infrastructure::tauri_adapter::{load_daily_usage_summary, load_weekly_usage_summary};
 
-const STARTUP_HISTORY_LIMIT: usize = 5;
-const APP_USAGE_REFRESH_MILLIS: i32 = 15_000;
+const USAGE_REFRESH_MILLIS: i32 = 30_000;
+const WEEKDAY_LABELS: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-/// Returns percentage height style for chart bars.
-fn bar_height(bin: u64, max_bin: u64) -> String {
-    let height = if max_bin == 0 {
-        0.0
-    } else {
-        (bin as f64 / max_bin as f64 * 100.0).max(8.0)
-    };
-    format!("height:{height:.0}%")
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum UsagePeriod {
+    Day,
+    Week,
 }
 
-fn launcher_display_label(launcher: &str) -> Option<String> {
-    let trimmed = launcher.trim();
-    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("unknown") {
-        None
-    } else {
-        Some(trimmed.to_string())
+#[derive(Debug, Clone)]
+enum UsageData {
+    Daily(DailyUsageSummary),
+    Weekly(WeeklyUsageSummary),
+}
+
+impl UsageData {
+    fn total_duration_ms(&self) -> u64 {
+        match self {
+            Self::Daily(summary) => summary.total_duration_ms,
+            Self::Weekly(summary) => summary.total_duration_ms,
+        }
     }
+
+    fn applications(&self) -> &[AppUsageTotal] {
+        match self {
+            Self::Daily(summary) => &summary.applications,
+            Self::Weekly(summary) => &summary.applications,
+        }
+    }
+
+    fn chart_bars(&self) -> Vec<ChartBar> {
+        match self {
+            Self::Daily(summary) => summary
+                .hourly_usage
+                .iter()
+                .map(|usage| ChartBar {
+                    label: match usage.hour {
+                        0 => "12a".to_string(),
+                        3 | 6 | 9 => format!("{}a", usage.hour),
+                        12 => "12p".to_string(),
+                        15 | 18 | 21 => format!("{}p", usage.hour - 12),
+                        _ => String::new(),
+                    },
+                    duration_ms: usage.duration_ms,
+                })
+                .collect(),
+            Self::Weekly(summary) => summary
+                .daily_usage
+                .iter()
+                .enumerate()
+                .map(|(index, usage)| ChartBar {
+                    label: WEEKDAY_LABELS.get(index).unwrap_or(&"").to_string(),
+                    duration_ms: usage.duration_ms,
+                })
+                .collect(),
+        }
+    }
+
+    fn period_label(&self, today: &str) -> String {
+        match self {
+            Self::Daily(summary) if summary.local_date == today => "Today".to_string(),
+            Self::Daily(summary) => format_date_label(&summary.local_date),
+            Self::Weekly(summary) => format!(
+                "{} – {}",
+                format_date_label(&summary.week_start_local_date),
+                format_date_label(&summary.week_end_local_date)
+            ),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ChartBar {
+    label: String,
+    duration_ms: u64,
+}
+
+fn today_local_date() -> String {
+    let now = js_sys::Date::new_0();
+    format!(
+        "{:04}-{:02}-{:02}",
+        now.get_full_year(),
+        now.get_month() + 1,
+        now.get_date()
+    )
+}
+
+fn app_initial(display_name: &str) -> String {
+    display_name
+        .chars()
+        .find(|character| character.is_alphanumeric())
+        .map(|character| character.to_uppercase().collect())
+        .unwrap_or_else(|| "?".to_string())
 }
 
 #[component]
-/// Main dashboard component rendering startup metrics.
+/// Main dashboard for daily and weekly application usage.
 pub fn Dashboard() -> impl IntoView {
-    let (startup_records, set_startup_records) = signal(Vec::<StartupRecord>::new());
-    let (usage_records, set_usage_records) = signal(Vec::<AppUsageRecord>::new());
-    let (loaded, set_loaded) = signal(false);
-
-    fn schedule_usage_fetch(setter: WriteSignal<Vec<AppUsageRecord>>) {
-        spawn_local(async move {
-            match load_app_usage_records().await {
-                Ok(records) => setter.set(records),
-                Err(error_message) => {
-                    console::error_1(&JsValue::from_str(&error_message));
-                }
-            }
-        });
-    }
-
-    schedule_usage_fetch(set_usage_records);
+    let today = StoredValue::new(today_local_date());
+    let (selected_date, set_selected_date) = signal(today.get_value());
+    let (period, set_period) = signal(UsagePeriod::Day);
+    let (usage_data, set_usage_data) = signal(None::<UsageData>);
+    let (loading, set_loading) = signal(true);
+    let (load_error, set_load_error) = signal(None::<String>);
+    let (refresh_tick, set_refresh_tick) = signal(0u64);
+    let request_id = StoredValue::new(0u64);
 
     if let Some(win) = window() {
-        let setter = set_usage_records;
         let callback = Closure::wrap(Box::new(move || {
-            schedule_usage_fetch(setter);
+            set_refresh_tick.update(|tick| *tick = tick.wrapping_add(1));
         }) as Box<dyn FnMut()>);
-
-        if let Err(err) = win.set_interval_with_callback_and_timeout_and_arguments_0(
+        let _ = win.set_interval_with_callback_and_timeout_and_arguments_0(
             callback.as_ref().unchecked_ref(),
-            APP_USAGE_REFRESH_MILLIS,
-        ) {
-            console::error_1(&err);
-        }
-
+            USAGE_REFRESH_MILLIS,
+        );
         callback.forget();
     }
 
     Effect::new(move |_| {
-        if loaded.get() {
-            return;
-        }
-        spawn_local({
-            let set_startup_records = set_startup_records;
-            let set_loaded = set_loaded;
-            async move {
-                let records = load_startup_records().await;
-                set_startup_records.set(records);
-                set_loaded.set(true);
+        let selected_period = period.get();
+        let date = selected_date.get();
+        let _ = refresh_tick.get();
+        let next_request_id = request_id.get_value().wrapping_add(1);
+        request_id.set_value(next_request_id);
+        set_loading.set(true);
+        set_load_error.set(None);
+
+        spawn_local(async move {
+            let result = match selected_period {
+                UsagePeriod::Day => load_daily_usage_summary(&date).await.map(UsageData::Daily),
+                UsagePeriod::Week => load_weekly_usage_summary(&date)
+                    .await
+                    .map(UsageData::Weekly),
+            };
+            if request_id.get_value() != next_request_id {
+                return;
             }
+            match result {
+                Ok(summary) => set_usage_data.set(Some(summary)),
+                Err(error) => {
+                    set_usage_data.set(None);
+                    set_load_error.set(Some(error));
+                }
+            }
+            set_loading.set(false);
         });
     });
 
-    let total_runs = Signal::derive(move || startup_records.with(|records| records.len()));
-    let latest_record =
-        Signal::derive(move || startup_records.with(|records| records.first().cloned()));
-    let history_records = Signal::derive(move || {
-        startup_records.with(|records| {
-            let mut limited = records.clone();
-            if limited.len() > STARTUP_HISTORY_LIMIT {
-                limited.truncate(STARTUP_HISTORY_LIMIT);
-            }
-            limited
-        })
-    });
     let total_duration = Signal::derive(move || {
-        startup_records.with(|records| {
-            let total_ms: u128 = records
-                .iter()
-                .map(|record| record.duration_ms as u128)
-                .sum();
-            format_total_duration(total_ms as u64)
+        usage_data.with(|data| {
+            data.as_ref()
+                .map(|summary| format_usage_duration(summary.total_duration_ms()))
+                .unwrap_or_else(|| "—".to_string())
         })
     });
-    let chart_points =
-        Signal::derive(move || startup_records.with(|records| compute_chart_points(records)));
-    let chart_max = Signal::derive(move || {
-        chart_points.with(|points| {
-            points
-                .iter()
-                .map(|point| point.duration_ms)
-                .max()
-                .unwrap_or(0)
+    let application_count = Signal::derive(move || {
+        usage_data.with(|data| {
+            data.as_ref()
+                .map(|summary| summary.applications().len())
+                .unwrap_or_default()
         })
     });
-    let chart_annotation_top = Signal::derive(move || format_duration_compact(chart_max.get()));
-    let chart_annotation_middle =
-        Signal::derive(move || format_duration_compact(chart_max.get() / 2));
-    let category_usage =
-        Signal::derive(move || startup_records.with(|records| compute_category_summary(records)));
-    let tiles = Signal::derive(move || startup_records.with(|records| compute_tiles(records)));
-    let usage_tiles =
-        Signal::derive(move || usage_records.with(|records| compute_usage_tiles(records)));
-    let usage_status_text = Signal::derive(move || {
-        usage_records.with(|records| match active_app_count(records) {
-            0 => "No active apps".to_string(),
-            1 => "1 active app".to_string(),
-            count => format!("{count} active apps"),
+    let period_label = Signal::derive(move || {
+        usage_data.with(|data| {
+            data.as_ref()
+                .map(|summary| summary.period_label(&today.get_value()))
+                .unwrap_or_else(|| format_date_label(&selected_date.get()))
         })
     });
-    let usage_last_updated = Signal::derive(move || {
-        usage_records.with(|records| {
-            latest_usage_timestamp(records)
-                .map(|timestamp| format!("Last updated {timestamp}"))
-                .unwrap_or_else(|| "Waiting for desktop activity…".to_string())
+    let maximum_bucket = Signal::derive(move || {
+        usage_data.with(|data| {
+            data.as_ref()
+                .and_then(|summary| {
+                    summary
+                        .chart_bars()
+                        .into_iter()
+                        .map(|bar| bar.duration_ms)
+                        .max()
+                })
+                .unwrap_or_default()
         })
     });
+    let can_move_forward = Signal::derive(move || selected_date.get() < today.get_value());
 
     view! {
-        <main class="app">
-            <section class="app__card">
-                <div class="app__summary">
-                    <header class="app__profile">
-                        <div class="app__avatar">
-                            "A"
+        <main class="dashboard">
+            <header class="dashboard__header">
+                <div>
+                    <span class="dashboard__eyebrow">"TIME WISE"</span>
+                    <h1 class="dashboard__title">"Usage"</h1>
+                </div>
+                <div class="dashboard__period-toggle" aria-label="Usage period">
+                    <button
+                        class:dashboard__period-button=true
+                        class:dashboard__period-button--active=move || period.get() == UsagePeriod::Day
+                        on:click=move |_| set_period.set(UsagePeriod::Day)
+                    >"Day"</button>
+                    <button
+                        class:dashboard__period-button=true
+                        class:dashboard__period-button--active=move || period.get() == UsagePeriod::Week
+                        on:click=move |_| set_period.set(UsagePeriod::Week)
+                    >"Week"</button>
+                </div>
+            </header>
+
+            <nav class="dashboard__date-navigation" aria-label="Date navigation">
+                <button
+                    class="dashboard__date-button"
+                    aria-label="Previous period"
+                    on:click=move |_| {
+                        let days = if period.get_untracked() == UsagePeriod::Day { -1 } else { -7 };
+                        if let Some(date) = shift_local_date(&selected_date.get_untracked(), days) {
+                            set_selected_date.set(date);
+                        }
+                    }
+                >"‹"</button>
+                <div class="dashboard__date-copy">
+                    <strong>{move || period_label.get()}</strong>
+                    <span>{move || match period.get() {
+                        UsagePeriod::Day => "Daily activity",
+                        UsagePeriod::Week => "Weekly activity",
+                    }}</span>
+                </div>
+                <button
+                    class="dashboard__date-button"
+                    aria-label="Next period"
+                    disabled=move || !can_move_forward.get()
+                    on:click=move |_| {
+                        let days = if period.get_untracked() == UsagePeriod::Day { 1 } else { 7 };
+                        if let Some(mut date) = shift_local_date(&selected_date.get_untracked(), days) {
+                            if date > today.get_value() {
+                                date = today.get_value();
+                            }
+                            set_selected_date.set(date);
+                        }
+                    }
+                >"›"</button>
+            </nav>
+
+            <Show when=move || load_error.get().is_some()>
+                <section class="dashboard__state dashboard__state--error" role="alert">
+                    <span class="dashboard__state-icon">"!"</span>
+                    <div>
+                        <strong>"Usage data unavailable"</strong>
+                        <p>"Time Wise couldn't load the recorded activity. Measurement may be temporarily unavailable."</p>
+                    </div>
+                    <button on:click=move |_| set_refresh_tick.update(|tick| *tick = tick.wrapping_add(1))>
+                        "Try again"
+                    </button>
+                </section>
+            </Show>
+
+            <Show when=move || load_error.get().is_none()>
+                <section class="dashboard__overview" aria-busy=move || loading.get().to_string()>
+                    <div class="dashboard__total-card">
+                        <span class="dashboard__metric-label">"Total usage"</span>
+                        <strong class="dashboard__total-value">{move || total_duration.get()}</strong>
+                        <span class="dashboard__metric-detail">{move || {
+                            let count = application_count.get();
+                            match count {
+                                0 => "No applications recorded".to_string(),
+                                1 => "1 application".to_string(),
+                                _ => format!("{count} applications"),
+                            }
+                        }}</span>
+                    </div>
+
+                    <div class="dashboard__chart-card">
+                        <div class="dashboard__section-heading">
+                            <div>
+                                <span class="dashboard__metric-label">{move || match period.get() {
+                                    UsagePeriod::Day => "Activity by hour",
+                                    UsagePeriod::Week => "Activity by day",
+                                }}</span>
+                                <strong>{move || format_axis_duration(maximum_bucket.get())} " peak"</strong>
+                            </div>
+                            <span class="dashboard__live-indicator">{move || if loading.get() { "Updating…" } else { "Recorded" }}</span>
                         </div>
+                        <div class="dashboard__chart">
+                            <div class="dashboard__chart-grid dashboard__chart-grid--top"></div>
+                            <div class="dashboard__chart-grid dashboard__chart-grid--middle"></div>
+                            {move || {
+                                let maximum = maximum_bucket.get();
+                                usage_data.with(|data| {
+                                    data.as_ref()
+                                        .map(|summary| summary.chart_bars())
+                                        .unwrap_or_default()
+                                })
+                                .into_iter()
+                                .map(|bar| {
+                                    let height = usage_bar_height(bar.duration_ms, maximum);
+                                    let title = format_usage_duration(bar.duration_ms);
+                                    view! {
+                                        <div class="dashboard__chart-column" title=title>
+                                            <div class="dashboard__chart-track">
+                                                <div class="dashboard__chart-bar" style=height></div>
+                                            </div>
+                                            <span>{bar.label}</span>
+                                        </div>
+                                    }
+                                })
+                                .collect::<Vec<_>>()
+                                .into_view()
+                            }}
+                        </div>
+                    </div>
+                </section>
+
+                <section class="dashboard__ranking">
+                    <div class="dashboard__ranking-header">
                         <div>
-                            <div class="app__total">{move || total_duration.get()}</div>
-                            <div class="app__label">"Startup time collected"
+                            <span class="dashboard__eyebrow">"APPLICATIONS"</span>
+                            <h2>"Most used"</h2>
+                        </div>
+                        <span>{move || application_count.get()} " total"</span>
+                    </div>
+
+                    <Show
+                        when=move || !loading.get() && application_count.get() == 0
+                        fallback=move || view! { <></> }
+                    >
+                        <div class="dashboard__state dashboard__state--empty">
+                            <span class="dashboard__state-icon">"◷"</span>
+                            <div>
+                                <strong>"No activity yet"</strong>
+                                <p>"Application usage recorded during this period will appear here."</p>
                             </div>
                         </div>
-                    </header>
-                    <div class="app__startup">
-                        <div class="app__startup-header">
-                            <span class="app__startup-title">"Startup performance"</span>
-                            <span class="app__startup-count">{move || {
-                                let count = total_runs.get();
-                                match count {
-                                    0 => "No runs yet".to_string(),
-                                    1 => "1 run recorded".to_string(),
-                                    _ => format!("{count} runs recorded"),
-                                }
-                            }}</span>
+                    </Show>
+
+                    <Show when=move || loading.get() && usage_data.get().is_none()>
+                        <div class="dashboard__loading-list" aria-label="Loading usage data">
+                            <span></span><span></span><span></span>
                         </div>
-                        <Show
-                            when=move || latest_record.get().is_some()
-                            fallback=move || {
-                                let message = if loaded.get() {
-                                    "Collecting first startup measurement…"
-                                } else {
-                                    "Loading startup metrics…"
-                                };
-                                view! { <div class="app__startup-empty">{message}</div> }
-                            }
-                        >
-                            {move || {
-                                let record = latest_record
-                                    .get()
-                                    .expect("checked by Show predicate");
-                                view! {
-                                    <div class="app__startup-latest">
-                                        <span class="app__startup-value">{format_duration(record.duration_ms)}</span>
-                                        <span class="app__startup-subtext">{
-                                            let timestamp = format_timestamp(record.recorded_at_ms);
-                                            match launcher_display_label(&record.launcher) {
-                                                Some(launcher) => {
-                                                    format!("Recorded {timestamp} • via {launcher}")
-                                                }
-                                                None => format!("Recorded {timestamp}"),
-                                            }
-                                        }</span>
-                                    </div>
-                                }
-                            }}
-                        </Show>
-                        <Show
-                            when=move || { history_records.get().len() > 1 }
-                            fallback=move || { view! { <></> } }
-                        >
-                            {move || {
-                                let mut records = history_records.get();
-                                let _ = records.first();
-                                let mut iter = records.into_iter();
-                                let _ = iter.next();
-                                let items = iter
-                                    .map(|record| {
-                                        view! {
-                                            <li class="app__startup-list-item">
-                                                <span class="app__startup-list-time">{format_duration(record.duration_ms)}</span>
-                                                <span class="app__startup-list-date">{
-                                                    let timestamp = format_timestamp(record.recorded_at_ms);
-                                                    match launcher_display_label(&record.launcher) {
-                                                        Some(launcher) => {
-                                                            format!("{timestamp} • via {launcher}")
-                                                        }
-                                                        None => timestamp,
-                                                    }
-                                                }</span>
-                                            </li>
-                                        }
-                                    })
-                                    .collect::<Vec<_>>();
-                                view! {
-                                    <ul class="app__startup-list">
-                                        {items.into_view()}
-                                    </ul>
-                                }
-                            }}
-                        </Show>
-                    </div>
-                    <div class="app__chart">
-                        <div class="app__chart-overlay">
-                            <div class="app__chart-grid-line app__chart-grid-line--top"></div>
-                            <div class="app__chart-grid-line app__chart-grid-line--middle"></div>
-                            <div class="app__chart-grid-line app__chart-grid-line--bottom"></div>
-                        </div>
+                    </Show>
+
+                    <ul class="dashboard__app-list">
                         {move || {
-                            let max_value = chart_max.get();
-                            chart_points
-                                .get()
-                                .into_iter()
-                                .map(|point| {
-                                    let style = bar_height(point.duration_ms, max_value);
-                                    view! {
-                                        <div class="app__chart-column">
-                                            <div class="app__chart-column-inner">
-                                                <div class="app__chart-bar" style=style></div>
+                            usage_data.with(|data| {
+                                data.as_ref()
+                                    .map(|summary| summary.applications().to_vec())
+                                    .unwrap_or_default()
+                            })
+                            .into_iter()
+                            .enumerate()
+                            .map(|(index, app)| {
+                                let is_unclassified = app.stable_key.is_none();
+                                let icon = match app.icon_png.as_deref() {
+                                    Some(bytes) if !bytes.is_empty() => view! {
+                                        <img src=icon_data_url(bytes) alt="" />
+                                    }.into_any(),
+                                    _ => view! {
+                                        <span>{app_initial(&app.display_name)}</span>
+                                    }.into_any(),
+                                };
+                                let share = usage_data.with(|data| {
+                                    data.as_ref()
+                                        .map(|summary| summary.total_duration_ms())
+                                        .filter(|total| *total > 0)
+                                        .map(|total| app.duration_ms as f64 / total as f64 * 100.0)
+                                        .unwrap_or_default()
+                                });
+                                view! {
+                                    <li class="dashboard__app-item">
+                                        <span class="dashboard__app-rank">{index + 1}</span>
+                                        <div
+                                            class="dashboard__app-icon"
+                                            class:dashboard__app-icon--unclassified=is_unclassified
+                                        >{icon}</div>
+                                        <div class="dashboard__app-details">
+                                            <div class="dashboard__app-copy">
+                                                <strong>{app.display_name}</strong>
+                                                <span>{format!("{share:.0}% of total")}</span>
+                                            </div>
+                                            <div class="dashboard__app-progress">
+                                                <span style=format!("width:{share:.1}%")></span>
                                             </div>
                                         </div>
-                                    }
-                                })
-                                .collect::<Vec<_>>()
-                                .into_view()
-                        }}
-                        <div class="app__chart-labels">
-                            {move || {
-                                chart_points
-                                    .get()
-                                    .into_iter()
-                                    .map(|point| view! { <span>{point.label}</span> })
-                                    .collect::<Vec<_>>()
-                                    .into_view()
-                            }}
-                        </div>
-                        <div class="app__chart-annotation app__chart-annotation--top">
-                            {move || chart_annotation_top.get()}
-                        </div>
-                        <div class="app__chart-annotation app__chart-annotation--middle">
-                            {move || chart_annotation_middle.get()}
-                        </div>
-                        <div class="app__chart-annotation app__chart-annotation--bottom">"0"
-                        </div>
-                    </div>
-                    <div class="app__categories">
-                        {move || {
-                            category_usage
-                                .get()
-                                .into_iter()
-                                .map(|category| {
-                                    view! {
-                                        <div class="app__category">
-                                            <span class=category.class_names>
-                                                {category.name}
-                                            </span>
-                                            <span class="app__category-minutes">{category.summary}</span>
-                                        </div>
-                                    }
-                                })
-                                .collect::<Vec<_>>()
-                                .into_view()
-                        }}
-                    </div>
-                </div>
-                <div class="app__grid">
-                    {move || {
-                        tiles
-                            .get()
-                            .into_iter()
-                            .map(|tile| {
-                                view! {
-                                    <div class="app__tile">
-                                        <div class="app__tile-icon">
-                                            {tile.icon}
-                                        </div>
-                                        <div class="app__tile-info">
-                                            <span class="app__tile-name">{tile.label}</span>
-                                            <span class="app__tile-minutes">{tile.duration}</span>
-                                        </div>
-                                    </div>
+                                        <strong class="dashboard__app-duration">{format_usage_duration(app.duration_ms)}</strong>
+                                    </li>
                                 }
                             })
                             .collect::<Vec<_>>()
                             .into_view()
-                    }}
-                </div>
-                <div class="app__usage">
-                    <div class="app__usage-header">
-                        <span class="app__usage-title">"Desktop usage"</span>
-                        <span class="app__usage-count">{move || usage_status_text.get()}</span>
-                    </div>
-                    <span class="app__usage-updated">{move || usage_last_updated.get()}</span>
-                    <Show
-                        when=move || !usage_tiles.get().is_empty()
-                        fallback=move || {
-                            view! { <div class="app__usage-empty">"Desktop activity will appear once apps launch."</div> }
-                        }
-                    >
-                        {move || {
-                            let tiles = usage_tiles.get();
-                            let rows = tiles
-                                .into_iter()
-                                .map(|tile| {
-                                    let indicator_class = if tile.active {
-                                        "app__usage-indicator app__usage-indicator--active"
-                                    } else {
-                                        "app__usage-indicator"
-                                    };
-                                    view! {
-                                        <li class="app__usage-item">
-                                            <div class="app__usage-main">
-                                                <span class=indicator_class></span>
-                                                <div class="app__usage-info">
-                                                    <span class="app__usage-name">{tile.name}</span>
-                                                    <span class="app__usage-subtitle">{tile.subtitle}</span>
-                                                </div>
-                                            </div>
-                                            <span class="app__usage-duration">{tile.duration}</span>
-                                        </li>
-                                    }
-                                })
-                                .collect::<Vec<_>>();
-                            view! { <ul class="app__usage-list">{rows.into_view()}</ul> }
                         }}
-                    </Show>
-                </div>
-            </section>
+                    </ul>
+                </section>
+            </Show>
         </main>
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::bar_height;
+    use super::*;
+    use crate::domain::usage_summary::{DailyUsageTotal, HourlyUsageTotal};
 
     #[test]
-    fn bar_height_zero_max_returns_zero_percent() {
-        let style = bar_height(0, 0);
-        assert!(style.contains("height:0%"));
+    fn daily_chart_has_24_hour_buckets() {
+        let summary = UsageData::Daily(DailyUsageSummary {
+            local_date: "2026-08-04".to_string(),
+            total_duration_ms: 0,
+            applications: Vec::new(),
+            hourly_usage: (0..24)
+                .map(|hour| HourlyUsageTotal {
+                    hour,
+                    duration_ms: u64::from(hour),
+                })
+                .collect(),
+        });
+        let bars = summary.chart_bars();
+        assert_eq!(bars.len(), 24);
+        assert_eq!(bars[0].label, "12a");
+        assert_eq!(bars[12].label, "12p");
+        assert_eq!(bars[23].label, "");
     }
 
     #[test]
-    fn bar_height_scales_to_full_height() {
-        let style = bar_height(15, 15);
-        assert!(style.contains("height:100%"));
+    fn weekly_chart_uses_monday_first_labels() {
+        let summary = UsageData::Weekly(WeeklyUsageSummary {
+            week_start_local_date: "2026-08-03".to_string(),
+            week_end_local_date: "2026-08-09".to_string(),
+            total_duration_ms: 0,
+            applications: Vec::new(),
+            daily_usage: (3..=9)
+                .map(|day| DailyUsageTotal {
+                    local_date: format!("2026-08-{day:02}"),
+                    duration_ms: 0,
+                })
+                .collect(),
+        });
+        let labels: Vec<_> = summary
+            .chart_bars()
+            .into_iter()
+            .map(|bar| bar.label)
+            .collect();
+        assert_eq!(labels, WEEKDAY_LABELS);
     }
 
     #[test]
-    fn bar_height_applies_minimum_percentage() {
-        let style = bar_height(0, 15);
-        assert!(style.contains("height:8%"));
+    fn unclassified_initial_is_readable() {
+        assert_eq!(app_initial("Unclassified"), "U");
+        assert_eq!(app_initial("***"), "?");
     }
 }
