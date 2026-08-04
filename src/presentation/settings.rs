@@ -108,7 +108,7 @@ pub fn Settings() -> impl IntoView {
                             <div class="settings__details">
                                 <span class="settings__label">"Launch on startup"</span>
                                 <span class="settings__description">
-                                    "Start Time Wise automatically when you sign in to Windows."
+                                    "Start Time Wise automatically when you sign in to your computer."
                                 </span>
                             </div>
                         </label>

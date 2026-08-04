@@ -3,12 +3,16 @@
 use std::path::PathBuf;
 use std::time::SystemTime;
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
 mod noop;
 #[cfg(target_os = "windows")]
 mod windows;
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "macos")]
+pub use macos::start_event_probe;
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
 pub use noop::start_event_probe;
 #[cfg(target_os = "windows")]
 pub use windows::start_event_probe;
@@ -28,6 +32,7 @@ pub struct ProcessIdentity {
     pub executable: PathBuf,
     pub package_family_name: Option<String>,
     pub application_user_model_id: Option<String>,
+    pub bundle_identifier: Option<String>,
     pub product_name: Option<String>,
     pub company_name: Option<String>,
     pub icon_png: Option<Vec<u8>>,

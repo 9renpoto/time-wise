@@ -285,7 +285,7 @@ pub fn run() {
                         }
                         Err(err) => {
                             recorder.record_subscription_failure(err.clone());
-                            eprintln!("failed to start Windows event probe: {err}");
+                            eprintln!("failed to start desktop event probe: {err}");
                         }
                     }
 
