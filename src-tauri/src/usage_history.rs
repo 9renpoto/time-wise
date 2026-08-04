@@ -294,6 +294,24 @@ impl UsageHistoryStore {
             .optional()
             .map_err(|error| error.to_string())
     }
+
+    /// Removes all measured usage while preserving application settings.
+    pub fn delete_all_usage_history(&self) -> Result<(), String> {
+        let mut connection = self
+            .connection
+            .lock()
+            .map_err(|_| "usage history mutex poisoned".to_string())?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| error.to_string())?;
+        transaction
+            .execute("DELETE FROM usage_sessions", [])
+            .map_err(|error| error.to_string())?;
+        transaction
+            .execute("DELETE FROM app_identities", [])
+            .map_err(|error| error.to_string())?;
+        transaction.commit().map_err(|error| error.to_string())
+    }
 }
 
 fn validate_session(session: &NewUsageSession<'_>) -> Result<(), String> {
@@ -417,6 +435,47 @@ mod tests {
         store.set_setting("autostart", "false", 10).unwrap();
         store.set_setting("autostart", "true", 20).unwrap();
         assert_eq!(store.setting("autostart").unwrap().as_deref(), Some("true"));
+    }
+
+    #[test]
+    fn deleting_history_preserves_settings_and_removes_identity_metadata() {
+        let (_directory, store) = store();
+        let app = AppMetadata {
+            stable_key: "product:editor".into(),
+            display_name: "Editor".into(),
+            executable: Some("editor.exe".into()),
+            icon_source: None,
+            icon_png: None,
+        };
+        store
+            .record_session(&NewUsageSession {
+                subject: UsageSubject::Identified(&app),
+                started_at_utc_ms: 1_000,
+                ended_at_utc_ms: 2_000,
+                measured_timezone: "UTC",
+                measured_local_date: "2026-08-04",
+                end_reason: "focus_changed",
+            })
+            .unwrap();
+        store
+            .set_setting("onboarding_completed", "true", 2_000)
+            .unwrap();
+
+        store.delete_all_usage_history().unwrap();
+
+        assert!(store
+            .sessions_for_local_date("2026-08-04")
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            store.setting("onboarding_completed").unwrap().as_deref(),
+            Some("true")
+        );
+        let connection = store.connection.lock().unwrap();
+        let identity_count: i64 = connection
+            .query_row("SELECT COUNT(*) FROM app_identities", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(identity_count, 0);
     }
 
     #[test]
