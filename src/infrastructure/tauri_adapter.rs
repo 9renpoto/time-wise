@@ -3,7 +3,11 @@ use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{console, window};
 
-use crate::domain::{app_usage_record::AppUsageRecord, startup_record::StartupRecord};
+use crate::domain::{
+    app_usage_record::AppUsageRecord,
+    startup_record::StartupRecord,
+    usage_summary::{DailyUsageSummary, WeeklyUsageSummary},
+};
 
 async fn invoke_command_with<T>(command: &str, payload: JsValue) -> Result<T, JsValue>
 where
@@ -60,6 +64,13 @@ pub struct AutostartStatus {
 #[derive(serde::Serialize)]
 struct AutostartPayload {
     enabled: bool,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
+struct UsageDatePayload<'a> {
+    local_date: &'a str,
 }
 
 pub async fn fetch_autostart_enabled() -> Result<bool, ()> {
@@ -130,6 +141,30 @@ pub async fn load_app_usage_records() -> Result<Vec<AppUsageRecord>, String> {
             Err(format!("failed to fetch app usage records: {err:?}"))
         }
     }
+}
+
+#[allow(dead_code)]
+pub async fn load_daily_usage_summary(local_date: &str) -> Result<DailyUsageSummary, String> {
+    let payload = serde_wasm_bindgen::to_value(&UsageDatePayload { local_date })
+        .map_err(|error| error.to_string())?;
+    invoke_command_with("fetch_daily_usage_summary", payload)
+        .await
+        .map_err(|error| {
+            log_error(&format!("failed to fetch daily usage summary: {error:?}"));
+            format!("failed to fetch daily usage summary: {error:?}")
+        })
+}
+
+#[allow(dead_code)]
+pub async fn load_weekly_usage_summary(local_date: &str) -> Result<WeeklyUsageSummary, String> {
+    let payload = serde_wasm_bindgen::to_value(&UsageDatePayload { local_date })
+        .map_err(|error| error.to_string())?;
+    invoke_command_with("fetch_weekly_usage_summary", payload)
+        .await
+        .map_err(|error| {
+            log_error(&format!("failed to fetch weekly usage summary: {error:?}"));
+            format!("failed to fetch weekly usage summary: {error:?}")
+        })
 }
 
 fn log_error(message: &str) {

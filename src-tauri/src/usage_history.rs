@@ -216,6 +216,17 @@ impl UsageHistoryStore {
     }
 
     pub fn sessions_for_local_date(&self, date: &str) -> Result<Vec<StoredUsageSession>, String> {
+        self.sessions_for_local_date_range(date, date)
+    }
+
+    pub fn sessions_for_local_date_range(
+        &self,
+        start_date: &str,
+        end_date: &str,
+    ) -> Result<Vec<StoredUsageSession>, String> {
+        if end_date < start_date {
+            return Err("usage history date range ends before it starts".to_string());
+        }
         let connection = self
             .connection
             .lock()
@@ -228,12 +239,12 @@ impl UsageHistoryStore {
                 sessions.measured_timezone, sessions.measured_local_date, sessions.end_reason
              FROM usage_sessions AS sessions
              LEFT JOIN app_identities AS apps ON apps.id = sessions.app_identity_id
-             WHERE sessions.measured_local_date = ?1
-             ORDER BY sessions.started_at_utc_ms, sessions.id",
+             WHERE sessions.measured_local_date BETWEEN ?1 AND ?2
+             ORDER BY sessions.measured_local_date, sessions.started_at_utc_ms, sessions.id",
             )
             .map_err(|error| error.to_string())?;
         let rows = statement
-            .query_map(params![date], |row| {
+            .query_map(params![start_date, end_date], |row| {
                 Ok(StoredUsageSession {
                     stable_key: row.get(0)?,
                     display_name: row.get(1)?,
