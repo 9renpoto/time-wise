@@ -3,6 +3,7 @@ mod app_usage;
 mod platform;
 mod startup_metrics;
 pub mod usage_history;
+mod usage_queries;
 mod usage_recorder;
 
 use std::env;
@@ -21,6 +22,7 @@ use tauri::{
     Manager, RunEvent, State, WebviewUrl, WebviewWindow, Window,
 };
 use usage_history::UsageHistoryStore;
+use usage_queries::{fetch_daily_usage_summary, fetch_weekly_usage_summary};
 use usage_recorder::{UsageRecorder, CHECKPOINT_INTERVAL_SECONDS};
 
 #[cfg(not(target_os = "macos"))]
@@ -173,7 +175,9 @@ pub fn run() {
         ))
         .invoke_handler(tauri::generate_handler![
             fetch_app_usage_records,
+            fetch_daily_usage_summary,
             fetch_startup_records,
+            fetch_weekly_usage_summary,
             get_autostart_enabled,
             set_autostart_enabled
         ])
