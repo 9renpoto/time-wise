@@ -13,16 +13,20 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-and-test:
+  changes:
+    name: Select verification scope
     runs-on: ubuntu-latest
+    outputs:
+      verify: ${{ steps.scope.outputs.verify }}
+      windows: ${{ steps.scope.outputs.windows }}
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
-      - name: Select Rust verification scope
-        id: changes
+      - name: Detect relevant changes
+        id: scope
         shell: bash
         env:
           BEFORE_SHA: ${{ github.event.before }}
@@ -33,47 +37,34 @@ jobs:
             base_sha="$(git rev-list --max-parents=0 HEAD)"
           fi
 
-          ui=false
-          tauri=false
-          workspace=false
+          verify=false
+          windows=false
 
           while IFS= read -r path; do
             case "$path" in
-              Cargo.toml|Cargo.lock|.github/workflows/ci.yml)
-                workspace=true
+              Cargo.toml|Cargo.lock|.github/workflows/ci.yml|.github/workflows/tauri-release.yml|src-tauri/*)
+                verify=true
+                windows=true
                 ;;
-              src-tauri/*)
-                tauri=true
-                ;;
-              src/*.rs)
-                ui=true
+              src/*|public/*|index.html|Trunk.toml)
+                verify=true
                 ;;
             esac
           done < <(git diff --name-only "$base_sha" "$GITHUB_SHA")
 
-          if [[ "$workspace" == true || ("$ui" == true && "$tauri" == true) ]]; then
-            scope=workspace
-          elif [[ "$tauri" == true ]]; then
-            scope=tauri
-          elif [[ "$ui" == true ]]; then
-            scope=ui
-          else
-            scope=none
-          fi
+          echo "verify=$verify" >> "$GITHUB_OUTPUT"
+          echo "windows=$windows" >> "$GITHUB_OUTPUT"
 
-          echo "scope=$scope" >> "$GITHUB_OUTPUT"
-          if [[ "$scope" == tauri || "$scope" == workspace ]]; then
-            echo "needs_tauri=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "needs_tauri=false" >> "$GITHUB_OUTPUT"
-          fi
+  workspace:
+    name: Workspace (Ubuntu)
+    needs: changes
+    if: needs.changes.outputs.verify == 'true'
+    runs-on: ubuntu-latest
 
-      - name: Report skipped Rust verification
-        if: steps.changes.outputs.scope == 'none'
-        run: echo "No Rust changes detected; skipping Rust verification."
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install system dependencies
-        if: steps.changes.outputs.needs_tauri == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev \
@@ -87,65 +78,73 @@ jobs:
               librsvg2-dev
 
       - name: Install Rust toolchain
-        if: steps.changes.outputs.scope != 'none'
         uses: dtolnay/rust-toolchain@eac0f66a48bc4b70a10b9acd4c4e930f835d95ff # 1.95.0
         with:
           components: clippy, rustfmt, llvm-tools
+          targets: wasm32-unknown-unknown
+
+      - name: Install trunk
+        uses: jetli/trunk-action@99496660f5859714859a117b35d888127be572e1 # v0.5.0
+        with:
+          version: "latest"
 
       - name: Check formatting
-        if: steps.changes.outputs.scope != 'none'
         run: cargo fmt --all -- --check
 
-      - name: Run Clippy
-        if: steps.changes.outputs.scope != 'none'
-        shell: bash
-        env:
-          SCOPE: ${{ steps.changes.outputs.scope }}
-        run: |
-          case "$SCOPE" in
-            ui)
-              cargo clippy -p time-wise-ui --bins --tests --examples -- -D rust_2018_idioms -D warnings
-              ;;
-            tauri)
-              cargo clippy -p time-wise --bins --tests --examples -- -D rust_2018_idioms -D warnings
-              ;;
-            workspace)
-              cargo clippy --workspace --bins --tests --examples -- -D rust_2018_idioms -D warnings
-              ;;
-          esac
+      - name: Run Clippy for the workspace
+        run: cargo clippy --workspace --bins --tests --examples -- -D rust_2018_idioms -D warnings
 
       - name: Install grcov
-        if: steps.changes.outputs.scope != 'none'
         run: cargo install grcov
 
-      - name: Run tests with coverage
-        if: steps.changes.outputs.scope != 'none'
-        shell: bash
+      - name: Run workspace tests with coverage
         env:
           RUSTFLAGS: "-C instrument-coverage"
           LLVM_PROFILE_FILE: "cargo-test-%p.profraw"
-          SCOPE: ${{ steps.changes.outputs.scope }}
-        run: |
-          case "$SCOPE" in
-            ui)
-              cargo test -p time-wise-ui
-              ;;
-            tauri)
-              cargo test -p time-wise
-              ;;
-            workspace)
-              cargo test --workspace
-              ;;
-          esac
+        run: cargo test --workspace
+
+      - name: Build portable frontend
+        run: trunk build
 
       - name: Generate coverage report
-        if: steps.changes.outputs.scope != 'none'
         run: grcov . --binary-path ./target/debug/deps/ -s . -t lcov --branch --ignore-not-existing --ignore "target/*" --ignore ".cargo/*" -o lcov.info
 
       - name: Upload coverage to Codecov
-        if: steps.changes.outputs.scope != 'none'
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: lcov.info
           fail_ci_if_error: true
+
+  windows-platform:
+    name: Windows platform
+    needs: changes
+    if: needs.changes.outputs.windows == 'true'
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@eac0f66a48bc4b70a10b9acd4c4e930f835d95ff # 1.95.0
+        with:
+          components: clippy
+          targets: wasm32-unknown-unknown
+
+      - name: Run Clippy for the Windows backend
+        run: cargo clippy -p time-wise --lib --tests -- -D rust_2018_idioms -D warnings
+
+      - name: Run Windows backend tests
+        run: cargo test -p time-wise --lib
+
+      - name: Install trunk
+        uses: jetli/trunk-action@99496660f5859714859a117b35d888127be572e1 # v0.5.0
+        with:
+          version: "latest"
+
+      - name: Build Windows NSIS installer
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
+        with:
+          args: --bundles nsis
+          uploadWorkflowArtifacts: true
+          workflowArtifactNamePattern: windows-[arch]-[bundle]

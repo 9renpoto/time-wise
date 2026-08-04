@@ -6,7 +6,41 @@ on:
       - 'v*'
 
 jobs:
-  release:
+  release-windows:
+    name: Release Windows installers
+    permissions:
+      contents: write
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@eac0f66a48bc4b70a10b9acd4c4e930f835d95ff # 1.95.0
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install trunk
+        uses: jetli/trunk-action@99496660f5859714859a117b35d888127be572e1 # v0.5.0
+        with:
+          version: 'latest'
+
+      - name: Build and release
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Release ${{ github.ref_name }}'
+          releaseBody: 'See the assets to download this version and install.'
+          releaseDraft: false
+          prerelease: false
+          args: '--bundles nsis,msi'
+
+  release-linux-and-macos:
+    name: Release ${{ matrix.platform }} (paused)
+    if: ${{ vars.ENABLE_NON_WINDOWS_RELEASES == 'true' }}
     permissions:
       contents: write
     strategy:
@@ -19,9 +53,6 @@ jobs:
             args: '--target x86_64-apple-darwin'
           - platform: 'ubuntu-latest'
             args: ''
-          - platform: 'windows-latest'
-            args: ''
-
     runs-on: ${{ matrix.platform }}
 
     steps:
