@@ -17,8 +17,8 @@ fn tauri_window_defaults_and_build_commands() {
     assert_eq!(win0["visible"], false);
     assert_eq!(win0["decorations"], true);
     assert_eq!(win0["skipTaskbar"], true);
-    assert_eq!(win0["width"], 440);
-    assert_eq!(win0["height"], 520);
+    assert_eq!(win0["width"], 900);
+    assert_eq!(win0["height"], 700);
     assert_eq!(win0["minWidth"], 440);
     assert_eq!(win0["minHeight"], 520);
 }

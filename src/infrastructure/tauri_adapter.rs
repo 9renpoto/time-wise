@@ -3,11 +3,7 @@ use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{console, window};
 
-use crate::domain::{
-    app_usage_record::AppUsageRecord,
-    startup_record::StartupRecord,
-    usage_summary::{DailyUsageSummary, WeeklyUsageSummary},
-};
+use crate::domain::usage_summary::{DailyUsageSummary, WeeklyUsageSummary};
 
 async fn invoke_command_with<T>(command: &str, payload: JsValue) -> Result<T, JsValue>
 where
@@ -68,7 +64,6 @@ struct AutostartPayload {
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-#[allow(dead_code)]
 struct UsageDatePayload<'a> {
     local_date: &'a str,
 }
@@ -117,33 +112,6 @@ pub async fn set_autostart_enabled(enabled: bool) -> AutostartStatus {
     }
 }
 
-pub async fn load_startup_records() -> Vec<StartupRecord> {
-    match invoke_command::<Vec<StartupRecord>>("fetch_startup_records").await {
-        Ok(mut records) => {
-            records.sort_by_key(|record| std::cmp::Reverse(record.recorded_at_ms));
-            records
-        }
-        Err(err) => {
-            log_error(&format!("failed to fetch startup records: {err:?}"));
-            Vec::new()
-        }
-    }
-}
-
-pub async fn load_app_usage_records() -> Result<Vec<AppUsageRecord>, String> {
-    match invoke_command::<Vec<AppUsageRecord>>("fetch_app_usage_records").await {
-        Ok(mut records) => {
-            sort_app_usage_records(&mut records);
-            Ok(records)
-        }
-        Err(err) => {
-            log_error(&format!("failed to fetch app usage records: {err:?}"));
-            Err(format!("failed to fetch app usage records: {err:?}"))
-        }
-    }
-}
-
-#[allow(dead_code)]
 pub async fn load_daily_usage_summary(local_date: &str) -> Result<DailyUsageSummary, String> {
     let payload = serde_wasm_bindgen::to_value(&UsageDatePayload { local_date })
         .map_err(|error| error.to_string())?;
@@ -155,7 +123,6 @@ pub async fn load_daily_usage_summary(local_date: &str) -> Result<DailyUsageSumm
         })
 }
 
-#[allow(dead_code)]
 pub async fn load_weekly_usage_summary(local_date: &str) -> Result<WeeklyUsageSummary, String> {
     let payload = serde_wasm_bindgen::to_value(&UsageDatePayload { local_date })
         .map_err(|error| error.to_string())?;
@@ -169,57 +136,4 @@ pub async fn load_weekly_usage_summary(local_date: &str) -> Result<WeeklyUsageSu
 
 fn log_error(message: &str) {
     console::error_1(&JsValue::from_str(message));
-}
-
-fn sort_app_usage_records(records: &mut [AppUsageRecord]) {
-    records.sort_by(|a, b| {
-        b.active
-            .cmp(&a.active)
-            .then_with(|| b.total_active_ms.cmp(&a.total_active_ms))
-            .then_with(|| b.last_seen_at_ms.cmp(&a.last_seen_at_ms))
-    });
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn record(
-        name: &str,
-        active: bool,
-        total_active_ms: u64,
-        last_seen_at_ms: u64,
-    ) -> AppUsageRecord {
-        AppUsageRecord {
-            name: name.to_string(),
-            executable: None,
-            total_active_ms,
-            last_seen_at_ms,
-            first_seen_at_ms: 0,
-            active,
-        }
-    }
-
-    #[test]
-    fn sort_app_usage_records_prioritizes_active_then_duration_then_recent() {
-        let mut records = vec![
-            record("inactive-long", false, 5_000, 1_000),
-            record("active-short", true, 1_000, 2_000),
-            record("active-long", true, 10_000, 500),
-            record("inactive-recent", false, 5_000, 10_000),
-        ];
-
-        sort_app_usage_records(&mut records);
-
-        let names: Vec<_> = records.iter().map(|entry| entry.name.as_str()).collect();
-        assert_eq!(
-            names,
-            vec![
-                "active-long",
-                "active-short",
-                "inactive-recent",
-                "inactive-long"
-            ]
-        );
-    }
 }
