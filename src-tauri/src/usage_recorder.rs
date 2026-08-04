@@ -78,6 +78,7 @@ impl SessionSink for SqliteSessionSink {
 
 pub struct UsageRecorder {
     sink: Arc<dyn SessionSink>,
+    history_store: Option<Arc<UsageHistoryStore>>,
     state: Mutex<RecorderState>,
     diagnostics: Mutex<RecorderDiagnostics>,
     last_event_at_ms: Mutex<Option<u64>>,
@@ -86,12 +87,22 @@ pub struct UsageRecorder {
 impl UsageRecorder {
     #[must_use]
     pub fn new(store: Arc<UsageHistoryStore>) -> Self {
-        Self::with_sink(Arc::new(SqliteSessionSink { store }))
+        Self {
+            sink: Arc::new(SqliteSessionSink {
+                store: store.clone(),
+            }),
+            history_store: Some(store),
+            state: Mutex::new(RecorderState::Idle),
+            diagnostics: Mutex::new(RecorderDiagnostics::default()),
+            last_event_at_ms: Mutex::new(None),
+        }
     }
 
+    #[cfg(test)]
     fn with_sink(sink: Arc<dyn SessionSink>) -> Self {
         Self {
             sink,
+            history_store: None,
             state: Mutex::new(RecorderState::Idle),
             diagnostics: Mutex::new(RecorderDiagnostics::default()),
             last_event_at_ms: Mutex::new(None),
@@ -143,6 +154,34 @@ impl UsageRecorder {
             }
             *state = RecorderState::Idle;
         }
+    }
+
+    /// Clears durable usage and restarts an active measurement at the deletion boundary.
+    pub fn delete_history(&self, at: SystemTime) -> Result<(), String> {
+        let Some(store) = &self.history_store else {
+            return Err("usage history store unavailable".to_string());
+        };
+        let at_utc_ms = system_time_to_ms(at);
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| "usage recorder state mutex poisoned".to_string())?;
+
+        if let RecorderState::Recording(active) = &*state {
+            if at_utc_ms > active.started_at_utc_ms {
+                self.persist(active, at_utc_ms, "history_deleted");
+                *state = RecorderState::Recording(ActiveSession {
+                    subject: active.subject.clone(),
+                    started_at_utc_ms: at_utc_ms,
+                });
+            }
+        }
+
+        store.delete_all_usage_history().inspect_err(|error| {
+            if let Ok(mut diagnostics) = self.diagnostics.lock() {
+                diagnostics.persistence_error = Some(error.clone());
+            }
+        })
     }
 
     pub fn record_subscription_failure(&self, error: String) {
@@ -405,6 +444,26 @@ mod tests {
         let sessions = sink.sessions.lock().unwrap();
         assert_eq!(sessions.len(), 1);
         assert_eq!(sessions[0].end_reason, "measurement_stopped");
+    }
+
+    #[test]
+    fn deleting_history_restarts_an_active_session_at_the_deletion_boundary() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = Arc::new(
+            UsageHistoryStore::with_storage_path(directory.path().join("usage.sqlite")).unwrap(),
+        );
+        let recorder = UsageRecorder::new(store.clone());
+        recorder.handle_event(foreground(1_000, r"C:\Apps\Editor.exe"));
+
+        recorder.delete_history(at(2_000)).unwrap();
+        recorder.checkpoint(at(3_000));
+
+        let (_, measured_date) = local_measurement_context(2_000);
+        let sessions = store.sessions_for_local_date(&measured_date).unwrap();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].started_at_utc_ms, 2_000);
+        assert_eq!(sessions[0].ended_at_utc_ms, 3_000);
+        assert_eq!(sessions[0].end_reason, "checkpoint");
     }
 
     #[test]

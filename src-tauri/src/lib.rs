@@ -64,6 +64,8 @@ pub const TRAY_QUIT_ID: &str = "quit";
 pub const TRAY_OPEN_ID: &str = "toggle";
 /// 設定画面表示用 ID
 pub const TRAY_SETTINGS_ID: &str = "settings";
+const AUTOSTART_SETTING: &str = "autostart";
+const ONBOARDING_COMPLETED_SETTING: &str = "onboarding_completed";
 
 struct UsageWindowState {
     visible: AtomicBool,
@@ -135,7 +137,7 @@ fn show_settings_window(app: &tauri::AppHandle) {
         WebviewUrl::App("/?view=settings".into()),
     )
     .title("Time Wise Settings")
-    .inner_size(420.0, 420.0)
+    .inner_size(520.0, 650.0)
     .resizable(false)
     .skip_taskbar(false)
     .visible(true)
@@ -150,8 +152,39 @@ async fn get_autostart_enabled(autostart: State<'_, AutoLaunchManager>) -> Resul
 #[tauri::command]
 async fn set_autostart_enabled(
     autostart: State<'_, AutoLaunchManager>,
+    history: State<'_, Arc<UsageHistoryStore>>,
     enabled: bool,
 ) -> Result<bool, String> {
+    let enabled = update_autostart(&autostart, enabled)?;
+    history.set_setting(AUTOSTART_SETTING, &enabled.to_string(), current_utc_ms())?;
+    Ok(enabled)
+}
+
+#[tauri::command]
+fn get_onboarding_completed(history: State<'_, Arc<UsageHistoryStore>>) -> Result<bool, String> {
+    history
+        .setting(ONBOARDING_COMPLETED_SETTING)
+        .map(|value| value.as_deref() == Some("true"))
+}
+
+#[tauri::command]
+fn complete_onboarding(
+    autostart: State<'_, AutoLaunchManager>,
+    history: State<'_, Arc<UsageHistoryStore>>,
+    enable_autostart: bool,
+) -> Result<(), String> {
+    let enabled = update_autostart(&autostart, enable_autostart)?;
+    let now = current_utc_ms();
+    history.set_setting(AUTOSTART_SETTING, &enabled.to_string(), now)?;
+    history.set_setting(ONBOARDING_COMPLETED_SETTING, "true", now)
+}
+
+#[tauri::command]
+fn delete_all_usage_history(recorder: State<'_, Arc<UsageRecorder>>) -> Result<(), String> {
+    recorder.delete_history(SystemTime::now())
+}
+
+fn update_autostart(autostart: &AutoLaunchManager, enabled: bool) -> Result<bool, String> {
     let result = if enabled {
         autostart.enable()
     } else {
@@ -161,6 +194,14 @@ async fn set_autostart_enabled(
     result
         .and_then(|_| autostart.is_enabled())
         .map_err(|err| err.to_string())
+}
+
+fn current_utc_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .min(u64::MAX as u128) as u64
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -174,15 +215,19 @@ pub fn run() {
             None,
         ))
         .invoke_handler(tauri::generate_handler![
+            complete_onboarding,
+            delete_all_usage_history,
             fetch_app_usage_records,
             fetch_daily_usage_summary,
             fetch_startup_records,
             fetch_weekly_usage_summary,
             get_autostart_enabled,
+            get_onboarding_completed,
             set_autostart_enabled
         ])
         .setup(|app| {
             app.manage(UsageWindowState::default());
+            let mut onboarding_required = true;
 
             let app_usage_recorder = AppUsageRecorder::default();
             if let Err(err) = app_usage_recorder.record_current_processes() {
@@ -220,6 +265,10 @@ pub fn run() {
                 });
             match UsageHistoryStore::with_storage_path(usage_history_path) {
                 Ok(store) => {
+                    onboarding_required = store
+                        .setting(ONBOARDING_COMPLETED_SETTING)
+                        .map(|value| value.as_deref() != Some("true"))
+                        .unwrap_or(true);
                     let store = Arc::new(store);
                     let recorder = Arc::new(UsageRecorder::new(store.clone()));
                     app.manage(store);
@@ -259,7 +308,7 @@ pub fn run() {
                 WebviewUrl::App("/?view=settings".into()),
             )
             .title("Time Wise Settings")
-            .inner_size(420.0, 420.0)
+            .inner_size(520.0, 650.0)
             .resizable(false)
             .visible(false)
             .skip_taskbar(false)
@@ -362,20 +411,29 @@ pub fn run() {
                 .build(app)?;
 
             if let Some(window) = app.get_webview_window("main") {
-                #[cfg(target_os = "macos")]
-                {
-                    let _ = window.set_skip_taskbar(true);
-                }
-
-                #[cfg(not(target_os = "macos"))]
-                {
+                if onboarding_required {
                     let _ = window.set_skip_taskbar(false);
-                    let _ = window.hide();
-                }
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                    app.state::<UsageWindowState>()
+                        .visible
+                        .store(true, Ordering::SeqCst);
+                } else {
+                    #[cfg(target_os = "macos")]
+                    {
+                        let _ = window.set_skip_taskbar(true);
+                    }
 
-                app.state::<UsageWindowState>()
-                    .visible
-                    .store(false, Ordering::SeqCst);
+                    #[cfg(not(target_os = "macos"))]
+                    {
+                        let _ = window.set_skip_taskbar(false);
+                        let _ = window.hide();
+                    }
+
+                    app.state::<UsageWindowState>()
+                        .visible
+                        .store(false, Ordering::SeqCst);
+                }
             }
             Ok(())
         })

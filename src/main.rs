@@ -4,7 +4,7 @@ mod infrastructure;
 mod presentation;
 
 use leptos::prelude::*;
-use presentation::dashboard::Dashboard;
+use presentation::root::Root;
 use presentation::settings::Settings;
 use web_sys::window;
 
@@ -20,6 +20,6 @@ fn main() {
     if should_render_settings() {
         mount_to_body(|| view! { <Settings /> });
     } else {
-        mount_to_body(|| view! { <Dashboard /> });
+        mount_to_body(|| view! { <Root /> });
     }
 }
