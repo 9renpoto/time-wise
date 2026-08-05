@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "time-wise",
+  "productName": "Time Wise",
   "version": "0.1.0",
   "identifier": "com.9renpoto.time-wise",
   "build": {
@@ -13,7 +13,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "time-wise",
+        "title": "Time Wise",
         "width": 900,
         "height": 700,
         "minWidth": 440,
