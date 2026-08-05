@@ -40,6 +40,7 @@ fn tauri_window_defaults_and_build_commands() {
 
     // product identity
     assert_eq!(v["productName"], "Time Wise");
+    assert_eq!(v["identifier"], "io.github.umeno3.time-wise");
 
     // build commands
     assert_eq!(v["build"]["beforeDevCommand"], "trunk serve");
