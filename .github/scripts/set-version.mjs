@@ -10,6 +10,17 @@ const PACKAGE_MANIFESTS = [
 const TAURI_CONFIG = "src-tauri/tauri.conf.json";
 const CARGO_LOCK = "Cargo.lock";
 
+function readRequiredFile(path) {
+  try {
+    return readFileSync(path, "utf8");
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      throw new Error(`${path}: required version source is missing; ensure it is tracked`);
+    }
+    throw error;
+  }
+}
+
 function packageVersion(content, path) {
   const lines = content.split(/\r?\n/);
   const packageStart = lines.indexOf("[package]");
@@ -68,13 +79,13 @@ function lockedPackageVersion(content, packageName) {
 function readVersions() {
   const versions = PACKAGE_MANIFESTS.map(({ path, name }) => ({
     source: path,
-    value: packageVersion(readFileSync(path, "utf8"), path).version,
+    value: packageVersion(readRequiredFile(path), path).version,
     name,
   }));
-  const tauriConfig = JSON.parse(readFileSync(TAURI_CONFIG, "utf8"));
+  const tauriConfig = JSON.parse(readRequiredFile(TAURI_CONFIG));
   versions.push({ source: TAURI_CONFIG, value: tauriConfig.version });
 
-  const lock = readFileSync(CARGO_LOCK, "utf8");
+  const lock = readRequiredFile(CARGO_LOCK);
   for (const { name } of PACKAGE_MANIFESTS) {
     versions.push({
       source: `${CARGO_LOCK}:${name}`,
@@ -101,16 +112,16 @@ function updateVersions(version) {
   }
 
   for (const { path } of PACKAGE_MANIFESTS) {
-    const content = readFileSync(path, "utf8");
+    const content = readRequiredFile(path);
     writeFileSync(path, packageVersion(content, path).replace(version));
   }
 
-  const configContent = readFileSync(TAURI_CONFIG, "utf8");
+  const configContent = readRequiredFile(TAURI_CONFIG);
   const config = JSON.parse(configContent);
   config.version = version;
   writeFileSync(TAURI_CONFIG, `${JSON.stringify(config, null, 2)}\n`);
 
-  let lockContent = readFileSync(CARGO_LOCK, "utf8");
+  let lockContent = readRequiredFile(CARGO_LOCK);
   for (const { name } of PACKAGE_MANIFESTS) {
     lockContent = lockedPackageVersion(lockContent, name).replace(version);
   }
