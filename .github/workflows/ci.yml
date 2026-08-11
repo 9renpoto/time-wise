@@ -151,3 +151,44 @@ jobs:
           args: --bundles nsis
           uploadWorkflowArtifacts: true
           workflowArtifactNamePattern: windows-[arch]-[bundle]
+
+  build-and-test:
+    name: build-and-test
+    if: always()
+    needs: [changes, workspace, windows-platform]
+    runs-on: ubuntu-slim
+
+    steps:
+      - name: Require successful build and test jobs
+        shell: bash
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          VERIFY: ${{ needs.changes.outputs.verify }}
+          WINDOWS: ${{ needs.changes.outputs.windows }}
+          WORKSPACE_RESULT: ${{ needs.workspace.result }}
+          WINDOWS_RESULT: ${{ needs.windows-platform.result }}
+        run: |
+          if [[ "$CHANGES_RESULT" != success ]]; then
+            echo "Change detection failed: $CHANGES_RESULT"
+            exit 1
+          fi
+
+          if [[ "$VERIFY" == true && "$WORKSPACE_RESULT" != success ]]; then
+            echo "Workspace verification did not succeed: $WORKSPACE_RESULT"
+            exit 1
+          fi
+
+          if [[ "$VERIFY" != true && "$WORKSPACE_RESULT" != skipped ]]; then
+            echo "Workspace verification should have been skipped: $WORKSPACE_RESULT"
+            exit 1
+          fi
+
+          if [[ "$WINDOWS" == true && "$WINDOWS_RESULT" != success ]]; then
+            echo "Windows verification did not succeed: $WINDOWS_RESULT"
+            exit 1
+          fi
+
+          if [[ "$WINDOWS" != true && "$WINDOWS_RESULT" != skipped ]]; then
+            echo "Windows verification should have been skipped: $WINDOWS_RESULT"
+            exit 1
+          fi
