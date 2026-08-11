@@ -23,7 +23,7 @@ use tauri::{
 };
 use usage_history::UsageHistoryStore;
 use usage_queries::{fetch_daily_usage_summary, fetch_weekly_usage_summary};
-use usage_recorder::{UsageRecorder, CHECKPOINT_INTERVAL_SECONDS};
+use usage_recorder::{MeasurementHealth, UsageRecorder, CHECKPOINT_INTERVAL_SECONDS};
 
 #[cfg(not(target_os = "macos"))]
 use tauri::{PhysicalPosition, Position};
@@ -184,6 +184,11 @@ fn delete_all_usage_history(recorder: State<'_, Arc<UsageRecorder>>) -> Result<(
     recorder.delete_history(SystemTime::now())
 }
 
+#[tauri::command]
+fn fetch_measurement_health(recorder: State<'_, Arc<UsageRecorder>>) -> MeasurementHealth {
+    recorder.health()
+}
+
 fn update_autostart(autostart: &AutoLaunchManager, enabled: bool) -> Result<bool, String> {
     let result = if enabled {
         autostart.enable()
@@ -219,6 +224,7 @@ pub fn run() {
             delete_all_usage_history,
             fetch_app_usage_records,
             fetch_daily_usage_summary,
+            fetch_measurement_health,
             fetch_startup_records,
             fetch_weekly_usage_summary,
             get_autostart_enabled,
@@ -280,6 +286,7 @@ pub fn run() {
                                 while let Ok(event) = event_receiver.recv() {
                                     event_recorder.handle_event(event);
                                 }
+                                event_recorder.record_subscription_ended();
                             });
                             app.manage(probe);
                         }

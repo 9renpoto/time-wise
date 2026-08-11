@@ -11,7 +11,10 @@ use crate::application::usage_dashboard::{
     shift_local_date, usage_bar_height,
 };
 use crate::domain::usage_summary::{AppUsageTotal, DailyUsageSummary, WeeklyUsageSummary};
-use crate::infrastructure::tauri_adapter::{load_daily_usage_summary, load_weekly_usage_summary};
+use crate::infrastructure::tauri_adapter::{
+    fetch_measurement_health, load_daily_usage_summary, load_weekly_usage_summary,
+    MeasurementHealth, MeasurementHealthStatus,
+};
 
 const USAGE_REFRESH_MILLIS: i32 = 30_000;
 const WEEKDAY_LABELS: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -117,6 +120,7 @@ pub fn Dashboard() -> impl IntoView {
     let (usage_data, set_usage_data) = signal(None::<UsageData>);
     let (loading, set_loading) = signal(true);
     let (load_error, set_load_error) = signal(None::<String>);
+    let (measurement_health, set_measurement_health) = signal(None::<MeasurementHealth>);
     let (refresh_tick, set_refresh_tick) = signal(0u64);
     let request_id = StoredValue::new(0u64);
 
@@ -141,6 +145,13 @@ pub fn Dashboard() -> impl IntoView {
         set_load_error.set(None);
 
         spawn_local(async move {
+            match fetch_measurement_health().await {
+                Ok(health) => set_measurement_health.set(Some(health)),
+                Err(_) => set_measurement_health.set(Some(MeasurementHealth {
+                    status: MeasurementHealthStatus::EventSubscriptionFailed,
+                    latest_diagnostic: None,
+                })),
+            }
             let result = match selected_period {
                 UsagePeriod::Day => load_daily_usage_summary(&date).await.map(UsageData::Daily),
                 UsagePeriod::Week => load_weekly_usage_summary(&date)
@@ -251,6 +262,26 @@ pub fn Dashboard() -> impl IntoView {
                     }
                 >"›"</button>
             </nav>
+
+            <Show when=move || measurement_health.get().is_some_and(|health| health.status != MeasurementHealthStatus::Healthy)>
+                <section class="dashboard__state dashboard__state--warning" role="status">
+                    <span class="dashboard__state-icon">"!"</span>
+                    <div>
+                        <strong>{move || measurement_health.get().map(|health| match health.status {
+                            MeasurementHealthStatus::Healthy => "Measurement active",
+                            MeasurementHealthStatus::EventSubscriptionFailed => "Measurement unavailable",
+                            MeasurementHealthStatus::ObservationDegraded => "Some activity is unclassified",
+                            MeasurementHealthStatus::PersistenceFailed => "Activity could not be saved",
+                        }).unwrap_or("Measurement unavailable")}</strong>
+                        <p>{move || measurement_health.get().map(|health| match health.status {
+                            MeasurementHealthStatus::Healthy => "Time Wise is recording activity.",
+                            MeasurementHealthStatus::EventSubscriptionFailed => "Time Wise lost access to desktop activity events. Restart the app to retry.",
+                            MeasurementHealthStatus::ObservationDegraded => "Time Wise could not identify the focused application. The time is kept as unclassified activity.",
+                            MeasurementHealthStatus::PersistenceFailed => "Time Wise will retry saving when the next activity checkpoint is recorded.",
+                        }).unwrap_or("Time Wise could not determine the current measurement state.")}</p>
+                    </div>
+                </section>
+            </Show>
 
             <Show when=move || load_error.get().is_some()>
                 <section class="dashboard__state dashboard__state--error" role="alert">

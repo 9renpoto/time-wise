@@ -1,5 +1,6 @@
 //! Converts desktop lifecycle events into durable usage sessions.
 
+use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -12,6 +13,7 @@ use crate::platform::{DesktopEvent, DesktopEventKind, ObservationFailure};
 use crate::usage_history::{AppMetadata, NewUsageSession, UsageHistoryStore, UsageSubject};
 
 pub const CHECKPOINT_INTERVAL_SECONDS: u64 = 30;
+const MAX_DIAGNOSTIC_EVENTS: usize = 50;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum TrackedSubject {
@@ -37,6 +39,29 @@ pub struct RecorderDiagnostics {
     pub subscription_error: Option<String>,
     pub observation_failure: Option<ObservationFailure>,
     pub persistence_error: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MeasurementHealthStatus {
+    Healthy,
+    EventSubscriptionFailed,
+    ObservationDegraded,
+    PersistenceFailed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiagnosticEvent {
+    pub occurred_at_utc_ms: u64,
+    pub code: &'static str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MeasurementHealth {
+    pub status: MeasurementHealthStatus,
+    pub latest_diagnostic: Option<DiagnosticEvent>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -81,6 +106,7 @@ pub struct UsageRecorder {
     history_store: Option<Arc<UsageHistoryStore>>,
     state: Mutex<RecorderState>,
     diagnostics: Mutex<RecorderDiagnostics>,
+    diagnostic_events: Mutex<VecDeque<DiagnosticEvent>>,
     last_event_at_ms: Mutex<Option<u64>>,
 }
 
@@ -94,6 +120,7 @@ impl UsageRecorder {
             history_store: Some(store),
             state: Mutex::new(RecorderState::Idle),
             diagnostics: Mutex::new(RecorderDiagnostics::default()),
+            diagnostic_events: Mutex::new(VecDeque::new()),
             last_event_at_ms: Mutex::new(None),
         }
     }
@@ -105,6 +132,7 @@ impl UsageRecorder {
             history_store: None,
             state: Mutex::new(RecorderState::Idle),
             diagnostics: Mutex::new(RecorderDiagnostics::default()),
+            diagnostic_events: Mutex::new(VecDeque::new()),
             last_event_at_ms: Mutex::new(None),
         }
     }
@@ -113,6 +141,9 @@ impl UsageRecorder {
         let observed_at_utc_ms = system_time_to_ms(event.observed_at);
         if !self.accept_event_timestamp(observed_at_utc_ms) {
             return;
+        }
+        if let Ok(mut diagnostics) = self.diagnostics.lock() {
+            diagnostics.subscription_error = None;
         }
         match event.kind {
             DesktopEventKind::ForegroundChanged => {
@@ -188,6 +219,11 @@ impl UsageRecorder {
         if let Ok(mut diagnostics) = self.diagnostics.lock() {
             diagnostics.subscription_error = Some(error);
         }
+        self.record_diagnostic("event_subscription_failed");
+    }
+
+    pub fn record_subscription_ended(&self) {
+        self.record_subscription_failure("desktop event subscription ended".to_string());
     }
 
     #[must_use]
@@ -199,6 +235,29 @@ impl UsageRecorder {
                 persistence_error: Some("usage recorder diagnostics mutex poisoned".into()),
                 ..RecorderDiagnostics::default()
             })
+    }
+
+    #[must_use]
+    pub fn health(&self) -> MeasurementHealth {
+        let diagnostics = self.diagnostics();
+        let status = if diagnostics.persistence_error.is_some() {
+            MeasurementHealthStatus::PersistenceFailed
+        } else if diagnostics.subscription_error.is_some() {
+            MeasurementHealthStatus::EventSubscriptionFailed
+        } else if diagnostics.observation_failure.is_some() {
+            MeasurementHealthStatus::ObservationDegraded
+        } else {
+            MeasurementHealthStatus::Healthy
+        };
+        let latest_diagnostic = self
+            .diagnostic_events
+            .lock()
+            .ok()
+            .and_then(|events| events.back().cloned());
+        MeasurementHealth {
+            status,
+            latest_diagnostic,
+        }
     }
 
     fn focus_changed(&self, subject: TrackedSubject, at_utc_ms: u64) {
@@ -275,19 +334,42 @@ impl UsageRecorder {
             measured_local_date,
             end_reason: reason,
         });
-        if let Err(error) = result {
-            if let Ok(mut diagnostics) = self.diagnostics.lock() {
-                diagnostics.persistence_error = Some(error);
+        if let Ok(mut diagnostics) = self.diagnostics.lock() {
+            match result {
+                Ok(()) => diagnostics.persistence_error = None,
+                Err(error) => {
+                    diagnostics.persistence_error = Some(error);
+                    drop(diagnostics);
+                    self.record_diagnostic("usage_history_write_failed");
+                }
             }
         }
     }
 
     fn record_observation_failure(&self, failure: Option<ObservationFailure>) {
-        if let Some(failure) = failure {
-            if let Ok(mut diagnostics) = self.diagnostics.lock() {
-                diagnostics.observation_failure = Some(failure);
+        if let Ok(mut diagnostics) = self.diagnostics.lock() {
+            match failure {
+                Some(failure) => {
+                    diagnostics.observation_failure = Some(failure);
+                    drop(diagnostics);
+                    self.record_diagnostic("foreground_observation_failed");
+                }
+                None => diagnostics.observation_failure = None,
             }
         }
+    }
+
+    fn record_diagnostic(&self, code: &'static str) {
+        let Ok(mut events) = self.diagnostic_events.lock() else {
+            return;
+        };
+        if events.len() == MAX_DIAGNOSTIC_EVENTS {
+            events.pop_front();
+        }
+        events.push_back(DiagnosticEvent {
+            occurred_at_utc_ms: system_time_to_ms(SystemTime::now()),
+            code,
+        });
     }
 
     fn accept_event_timestamp(&self, at_utc_ms: u64) -> bool {
@@ -325,6 +407,7 @@ fn system_time_to_ms(time: SystemTime) -> u64 {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+    use std::sync::atomic::{AtomicBool, Ordering};
 
     #[derive(Default)]
     struct MemorySink {
@@ -335,6 +418,21 @@ mod tests {
         fn save(&self, session: &SessionRecord) -> Result<(), String> {
             self.sessions.lock().unwrap().push(session.clone());
             Ok(())
+        }
+    }
+
+    #[derive(Default)]
+    struct RecoveringSink {
+        fail_next: AtomicBool,
+    }
+
+    impl SessionSink for RecoveringSink {
+        fn save(&self, _session: &SessionRecord) -> Result<(), String> {
+            if self.fail_next.swap(false, Ordering::SeqCst) {
+                Err("database write failed for Secret Document.txt".to_string())
+            } else {
+                Ok(())
+            }
         }
     }
 
@@ -477,14 +575,47 @@ mod tests {
             failure: Some(ObservationFailure::ProcessOpenFailed(5)),
         });
         let diagnostics = recorder.diagnostics();
-        assert_eq!(
-            diagnostics.subscription_error.as_deref(),
-            Some("hook failed")
-        );
+        assert_eq!(diagnostics.subscription_error, None);
         assert_eq!(
             diagnostics.observation_failure,
             Some(ObservationFailure::ProcessOpenFailed(5))
         );
+        assert_eq!(
+            recorder.health().status,
+            MeasurementHealthStatus::ObservationDegraded
+        );
+
+        recorder.handle_event(foreground(20, r"C:\Apps\Editor.exe"));
+        assert_eq!(recorder.health().status, MeasurementHealthStatus::Healthy);
+    }
+
+    #[test]
+    fn persistence_health_recovers_after_a_successful_checkpoint() {
+        let sink = Arc::new(RecoveringSink::default());
+        sink.fail_next.store(true, Ordering::SeqCst);
+        let recorder = UsageRecorder::with_sink(sink);
+        recorder.handle_event(foreground(1_000, r"C:\Apps\Editor.exe"));
+        recorder.checkpoint(at(2_000));
+        assert_eq!(
+            recorder.health().status,
+            MeasurementHealthStatus::PersistenceFailed
+        );
+
+        recorder.checkpoint(at(3_000));
+        assert_eq!(recorder.health().status, MeasurementHealthStatus::Healthy);
+    }
+
+    #[test]
+    fn public_diagnostics_never_include_private_error_details() {
+        let (_sink, recorder) = recorder();
+        recorder.record_subscription_failure(
+            "window title: Secret Document; https://private.example".to_string(),
+        );
+
+        let serialized = serde_json::to_string(&recorder.health()).unwrap();
+        assert!(serialized.contains("event_subscription_failed"));
+        assert!(!serialized.contains("Secret Document"));
+        assert!(!serialized.contains("private.example"));
     }
 
     #[test]

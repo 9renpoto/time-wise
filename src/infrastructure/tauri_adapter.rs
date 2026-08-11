@@ -5,6 +5,29 @@ use web_sys::{console, window};
 
 use crate::domain::usage_summary::{DailyUsageSummary, WeeklyUsageSummary};
 
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MeasurementHealthStatus {
+    Healthy,
+    EventSubscriptionFailed,
+    ObservationDegraded,
+    PersistenceFailed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiagnosticEvent {
+    pub occurred_at_utc_ms: u64,
+    pub code: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MeasurementHealth {
+    pub status: MeasurementHealthStatus,
+    pub latest_diagnostic: Option<DiagnosticEvent>,
+}
+
 async fn invoke_command_with<T>(command: &str, payload: JsValue) -> Result<T, JsValue>
 where
     T: serde::de::DeserializeOwned,
@@ -166,6 +189,15 @@ pub async fn load_weekly_usage_summary(local_date: &str) -> Result<WeeklyUsageSu
         .map_err(|error| {
             log_error(&format!("failed to fetch weekly usage summary: {error:?}"));
             format!("failed to fetch weekly usage summary: {error:?}")
+        })
+}
+
+pub async fn fetch_measurement_health() -> Result<MeasurementHealth, String> {
+    invoke_command("fetch_measurement_health")
+        .await
+        .map_err(|error| {
+            log_error(&format!("failed to fetch measurement health: {error:?}"));
+            format!("failed to fetch measurement health: {error:?}")
         })
 }
 
