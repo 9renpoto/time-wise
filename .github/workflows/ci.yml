@@ -91,9 +91,9 @@ jobs:
 
       - name: Install Rust toolchain
         if: steps.changes.outputs.scope != 'none'
-        uses: dtolnay/rust-toolchain@eac0f66a48bc4b70a10b9acd4c4e930f835d95ff # 1.95.0
-        with:
-          components: clippy, rustfmt, llvm-tools
+        # The channel, components, and targets come from rust-toolchain.toml so
+        # that CI and local builds always resolve the same toolchain.
+        run: rustup show active-toolchain
 
       - name: Check formatting
         if: steps.changes.outputs.scope != 'none'
