@@ -48,15 +48,15 @@ A state in which the computer or relevant session is suspended. This period is e
 
 ## 正式対応 OS / Supported operating system
 
-リリース時に計測精度と主要機能を検証し、動作を保証する OS。v1 では Windows を正式対応 OS および配布対象とする。Linux と macOS は、将来アダプターを追加できるアーキテクチャ境界だけを維持する。
+リリース時に計測精度と主要機能を検証し、動作を保証する OS。v1 では Windows と macOS を正式対応 OS および配布対象とする。Linux は正式対応対象外とし、将来アダプターを追加できるアーキテクチャ境界だけを維持する。
 
-An operating system on which measurement accuracy and primary features are validated for release. Windows is the supported and distributed platform for v1. Linux and macOS retain only architectural boundaries for future adapters.
+An operating system on which measurement accuracy and primary features are validated for release. Windows and macOS are the supported and distributed platforms for v1. Linux is not officially supported and retains only an architectural boundary for a future adapter.
 
 ## アプリ / Application
 
-利用時間を集計する単位。Windows 上で安定して取得できる識別情報を基に同一性を判定する。ブラウザはブラウザ自体を一つのアプリとして扱い、Web サイト、ドメイン、タブには分けない。同じ製品の複数ウィンドウ、プロセス、ブラウザプロファイルも一つに合算する。
+利用時間を集計する単位。対応 OS 上で安定して取得できる識別情報を基に同一性を判定する。ブラウザはブラウザ自体を一つのアプリとして扱い、Web サイト、ドメイン、タブには分けない。同じ製品の複数ウィンドウ、プロセス、ブラウザプロファイルも一つに合算する。
 
-The unit used to aggregate usage time, identified from stable information available on Windows. A browser is treated as one application rather than being divided by website, domain, or tab. Multiple windows, processes, and browser profiles belonging to the same product are combined.
+The unit used to aggregate usage time, identified from stable information available on each supported operating system. A browser is treated as one application rather than being divided by website, domain, or tab. Multiple windows, processes, and browser profiles belonging to the same product are combined.
 
 ## アプリ識別情報 / Application identity
 
@@ -72,15 +72,15 @@ Usage time for which no focused-application identifier could be obtained. It is 
 
 ## 受け入れ確認 / Acceptance testing
 
-Windows 11 実機でフォーカス変更、画面ロック、スリープ、自動起動、トレイ動作を確認し、v1 の要件を満たすか判断する手動検証。自動ビルドと自動テストは GitHub Actions で実行する。
+Windows 11 実機と macOS 実機でフォーカス変更、画面ロック、スリープ、自動起動、トレイ動作を確認し、v1 の要件を満たすか判断する手動検証。自動ビルドと自動テストは GitHub Actions で実行する。
 
-Manual validation on physical Windows 11 hardware to determine whether focus changes, screen lock, sleep, autostart, and tray behavior satisfy v1 requirements. Automated builds and tests run in GitHub Actions.
+Manual validation on both physical Windows 11 and physical macOS hardware to determine whether focus changes, screen lock, sleep, autostart, and tray behavior satisfy v1 requirements. Automated builds and tests run in GitHub Actions.
 
 ## ポータブル中核 / Portable core
 
-特定 OS の API に依存しないドメインモデル、利用セッション処理、SQLite 永続化、日別・週別集計。Windows CI に加え、Ubuntu CI でも自動テストする。
+特定 OS の API に依存しないドメインモデル、利用セッション処理、SQLite 永続化、日別・週別集計。Windows CI と macOS CI に加え、Ubuntu CI でも自動テストする。
 
-Domain models, usage-session processing, SQLite persistence, and daily and weekly aggregation that do not depend on a specific operating-system API. The portable core is tested in both Windows and Ubuntu CI.
+Domain models, usage-session processing, SQLite persistence, and daily and weekly aggregation that do not depend on a specific operating-system API. The portable core is tested in Windows, macOS, and Ubuntu CI.
 
 ## 計測と可視化 / Measurement and visualization
 
@@ -90,9 +90,9 @@ The core v1 capability. It records focused-application usage and presents today'
 
 ## ローカル履歴 / Local history
 
-Windows ユーザーアカウントごとの端末内領域に保存された利用履歴。v1 ではサーバーへ送信せず、自動削除も行わず、無期限に保持する。将来サーバー同期を導入する場合は、別の保持規則を定める。
+OS のユーザーアカウントごとの端末内領域に保存された利用履歴。v1 ではサーバーへ送信せず、自動削除も行わず、無期限に保持する。将来サーバー同期を導入する場合は、別の保持規則を定める。
 
-Usage history stored on the device for an individual Windows user account. v1 does not send it to a server, delete it automatically, or share it with other accounts, and retains it indefinitely. Server synchronization will require separate retention rules.
+Usage history stored on the device for an individual operating-system user account. v1 does not send it to a server, delete it automatically, or share it with other accounts, and retains it indefinitely. Server synchronization will require separate retention rules.
 
 ## 全履歴削除 / Delete all history
 
@@ -102,9 +102,9 @@ An operation that deletes all usage history from the device. v1 requires confirm
 
 ## 計測日 / Measurement date
 
-利用時間を日別に集計する日付。計測時点の Windows ローカル日付を使用し、後から端末のタイムゾーンが変わっても過去の計測日は変更しない。
+利用時間を日別に集計する日付。計測時点の OS ローカル日付を使用し、後から端末のタイムゾーンが変わっても過去の計測日は変更しない。
 
-The date used for daily usage aggregation. It is the Windows local date at measurement time and does not change retrospectively when the device's time zone changes.
+The date used for daily usage aggregation. It is the operating-system local date at measurement time and does not change retrospectively when the device's time zone changes.
 
 ## 週 / Week
 
@@ -120,9 +120,9 @@ Periodic persistence of an in-progress usage session. v1 saves a checkpoint ever
 
 ## 自動起動 / Autostart
 
-Windows へのログイン時に Time Wise を起動し、トレイ常駐で計測を始める設定。初回セットアップで説明し、ユーザーが明示的に有効化した場合だけ使用する。後から設定画面で変更できる。
+OS へのログイン時に Time Wise を起動し、トレイ常駐で計測を始める設定。初回セットアップで説明し、ユーザーが明示的に有効化した場合だけ使用する。後から設定画面で変更できる。
 
-A setting that starts Time Wise at Windows sign-in and begins measurement in the system tray. It is explained during onboarding, enabled only with explicit user consent, and can be changed later in Settings.
+A setting that starts Time Wise at operating-system sign-in and begins measurement in the system tray. It is explained during onboarding, enabled only with explicit user consent, and can be changed later in Settings.
 
 ## 計測継続状態 / Continuous measurement
 
