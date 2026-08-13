@@ -264,6 +264,9 @@ impl UsageRecorder {
         let Ok(mut state) = self.state.lock() else {
             return;
         };
+        if matches!(*state, RecorderState::Interrupted) {
+            return;
+        }
         if let RecorderState::Recording(active) = &*state {
             if active.subject == subject {
                 return;
@@ -280,6 +283,9 @@ impl UsageRecorder {
         let Ok(mut state) = self.state.lock() else {
             return;
         };
+        if matches!(*state, RecorderState::Interrupted) {
+            return;
+        }
         if let RecorderState::Recording(active) = &*state {
             self.persist(active, at_utc_ms, "focus_changed");
         }
@@ -520,6 +526,28 @@ mod tests {
             recorder.stop(at(6_000));
             assert_eq!(sink.sessions.lock().unwrap().len(), 2);
         }
+    }
+
+    #[test]
+    fn foreground_changes_are_ignored_while_interrupted() {
+        let (sink, recorder) = recorder();
+        recorder.handle_event(foreground(1_000, "/Applications/Editor.app/Editor"));
+        recorder.handle_event(DesktopEvent {
+            observed_at: at(2_000),
+            kind: DesktopEventKind::SessionLocked,
+            process: None,
+            failure: None,
+        });
+        recorder.handle_event(foreground(
+            2_100,
+            "/System/Library/CoreServices/loginwindow.app/loginwindow",
+        ));
+        recorder.checkpoint(at(3_000));
+
+        let sessions = sink.sessions.lock().unwrap();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].end_reason, "session_locked");
+        assert_eq!(sessions[0].ended_at_utc_ms, 2_000);
     }
 
     #[test]
