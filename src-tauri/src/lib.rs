@@ -214,6 +214,11 @@ pub fn run() {
     let startup_instant = Instant::now();
 
     let builder = tauri::Builder::default()
+        // Register this first so duplicate launches exit before initializing
+        // autostart, windows, tray icons, or measurement workers.
+        .plugin(tauri_plugin_single_instance::init(
+            |_app, _args, _working_directory| {},
+        ))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,

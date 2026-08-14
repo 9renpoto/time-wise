@@ -104,3 +104,31 @@ fn windows_api_dependency_is_target_specific() {
         assert!(features.contains(&required), "missing feature: {required}");
     }
 }
+
+#[test]
+fn backend_enforces_a_single_desktop_instance() {
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let manifest_path = format!("{manifest_dir}/Cargo.toml");
+    let data = fs::read_to_string(manifest_path).expect("read Cargo.toml");
+    let manifest: toml::Value = toml::from_str(&data).expect("parse Cargo.toml");
+
+    assert_eq!(
+        manifest["dependencies"]["tauri-plugin-single-instance"].as_str(),
+        Some("2")
+    );
+
+    let lib_path = format!("{manifest_dir}/src/lib.rs");
+    let lib = fs::read_to_string(lib_path).expect("read backend lib.rs");
+    let single_instance = lib
+        .find(".plugin(tauri_plugin_single_instance::init")
+        .expect("single-instance plugin registration");
+    let opener = lib
+        .find(".plugin(tauri_plugin_opener::init")
+        .expect("opener plugin registration");
+    let autostart = lib
+        .find(".plugin(tauri_plugin_autostart::init")
+        .expect("autostart plugin registration");
+
+    assert!(single_instance < opener);
+    assert!(single_instance < autostart);
+}
