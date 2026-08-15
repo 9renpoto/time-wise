@@ -43,8 +43,8 @@ fn tauri_window_defaults_and_build_commands() {
     assert_eq!(v["identifier"], "io.github.umeno3.time-wise");
 
     // build commands
-    assert_eq!(v["build"]["beforeDevCommand"], "trunk serve");
-    assert_eq!(v["build"]["beforeBuildCommand"], "trunk build");
+    assert_eq!(v["build"]["beforeDevCommand"], "trunk serve --no-color");
+    assert_eq!(v["build"]["beforeBuildCommand"], "trunk build --no-color");
     assert_eq!(v["build"]["devUrl"], "http://localhost:1420");
 
     // window defaults
