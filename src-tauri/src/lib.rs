@@ -211,6 +211,10 @@ fn current_utc_ms() -> u64 {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // GUI launches (including macOS LaunchAgents) do not inherit shell environment
+    // variables. Set this before Tauri starts so its child processes inherit it too.
+    env::set_var("NO_COLOR", "1");
+
     let startup_instant = Instant::now();
 
     let builder = tauri::Builder::default()
