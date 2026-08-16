@@ -6,6 +6,7 @@
 - `public/`: Static assets served by Trunk. Build artifacts in `dist/` and `target/` remain untracked. CI, release, and hooks live under `.github/`.
 
 ## Build, Test, and Development Commands
+- `rust-toolchain.toml` pins the channel, components, and the `wasm32-unknown-unknown` target. Rustup resolves it automatically, so do not rely on a local `rustup default`; CI and releases read the same file.
 - `cargo tauri dev` – Launch the desktop shell with live-reloaded UI at `http://localhost:1420`.
 - `trunk serve` / `trunk build` – Develop or bundle the Web UI without the shell.
 - `cargo check` • `cargo fmt --all` • `cargo clippy --workspace -- -D warnings` – Full-workspace validation commands; use them after shared manifest or cross-package changes.

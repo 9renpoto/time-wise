@@ -17,9 +17,11 @@ This template should help get you started developing with Tauri and Leptos.
 
 ## Install
 
-To get started, you need to have Rust and the Tauri CLI installed.
+To get started, you need to have [rustup](https://rustup.rs/) and the Tauri CLI installed.
 
 Follow the instructions on the [Tauri website](https://tauri.app/v1/guides/getting-started/prerequisites) to set up your environment.
+
+The Rust toolchain itself is declared in `rust-toolchain.toml`, so rustup installs the correct channel, components, and the `wasm32-unknown-unknown` target on the first build. You do not need to select a toolchain manually.
 
 Once the prerequisites are installed, you can clone the repository and install the dependencies:
 

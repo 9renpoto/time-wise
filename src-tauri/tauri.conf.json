@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "io.github.umeno3.time-wise",
   "build": {
-    "beforeDevCommand": "trunk serve",
+    "beforeDevCommand": "trunk serve --no-color",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "trunk build",
+    "beforeBuildCommand": "trunk build --no-color",
     "frontendDist": "../dist"
   },
   "app": {

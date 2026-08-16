@@ -81,10 +81,9 @@ jobs:
               librsvg2-dev
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@eac0f66a48bc4b70a10b9acd4c4e930f835d95ff # 1.95.0
-        with:
-          components: clippy, rustfmt, llvm-tools
-          targets: wasm32-unknown-unknown
+        # The channel, components, and targets come from rust-toolchain.toml so
+        # that CI and local builds always resolve the same toolchain.
+        run: rustup show active-toolchain
 
       - name: Install trunk
         uses: jetli/trunk-action@69821d4eec12c308c4b811e459e37556cf920057 # v0.5.0
@@ -129,10 +128,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@eac0f66a48bc4b70a10b9acd4c4e930f835d95ff # 1.95.0
-        with:
-          components: clippy
-          targets: wasm32-unknown-unknown
+        # The channel, components, and targets come from rust-toolchain.toml.
+        run: rustup show active-toolchain
 
       - name: Run Clippy for the Windows backend
         run: cargo clippy -p time-wise --lib --tests -- -D rust_2018_idioms -D warnings
