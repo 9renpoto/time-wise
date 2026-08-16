@@ -353,6 +353,7 @@ fn process_identity_from_handle(
         executable,
         package_family_name,
         application_user_model_id,
+        bundle_identifier: None,
         product_name,
         company_name,
         icon_png,
