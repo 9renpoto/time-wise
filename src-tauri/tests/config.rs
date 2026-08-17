@@ -106,6 +106,22 @@ fn windows_api_dependency_is_target_specific() {
 }
 
 #[test]
+fn packaged_build_enables_tauri_custom_protocol() {
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let manifest_path = format!("{manifest_dir}/Cargo.toml");
+    let data = fs::read_to_string(manifest_path).expect("read Cargo.toml");
+    let manifest: toml::Value = toml::from_str(&data).expect("parse Cargo.toml");
+
+    let custom_protocol = manifest["features"]["custom-protocol"]
+        .as_array()
+        .expect("custom-protocol feature")
+        .iter()
+        .filter_map(toml::Value::as_str)
+        .collect::<Vec<_>>();
+    assert_eq!(custom_protocol, ["tauri/custom-protocol"]);
+}
+
+#[test]
 fn backend_enforces_a_single_desktop_instance() {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     let manifest_path = format!("{manifest_dir}/Cargo.toml");
@@ -126,9 +142,11 @@ fn backend_enforces_a_single_desktop_instance() {
         .find(".plugin(tauri_plugin_opener::init")
         .expect("opener plugin registration");
     let autostart = lib
-        .find(".plugin(tauri_plugin_autostart::init")
+        .find("tauri_plugin_autostart::Builder::new()")
         .expect("autostart plugin registration");
 
     assert!(single_instance < opener);
     assert!(single_instance < autostart);
+    assert!(lib.contains("const AUTOSTART_APP_NAME: &str = \"time-wise\";"));
+    assert!(lib.contains(".app_name(AUTOSTART_APP_NAME)"));
 }

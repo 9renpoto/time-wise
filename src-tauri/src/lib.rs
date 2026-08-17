@@ -31,7 +31,9 @@ use tauri::{PhysicalPosition, Position};
 use sysinfo::{get_current_pid, ProcessRefreshKind, ProcessesToUpdate, RefreshKind, System};
 #[cfg(not(target_os = "linux"))]
 use tauri::tray::TrayIconEvent;
-use tauri_plugin_autostart::{AutoLaunchManager, MacosLauncher};
+use tauri_plugin_autostart::AutoLaunchManager;
+#[cfg(target_os = "macos")]
+use tauri_plugin_autostart::MacosLauncher;
 
 trait WindowLike {
     fn hide_window(&self);
@@ -65,6 +67,7 @@ pub const TRAY_OPEN_ID: &str = "toggle";
 /// 設定画面表示用 ID
 pub const TRAY_SETTINGS_ID: &str = "settings";
 const AUTOSTART_SETTING: &str = "autostart";
+const AUTOSTART_APP_NAME: &str = "time-wise";
 const ONBOARDING_COMPLETED_SETTING: &str = "onboarding_completed";
 
 struct UsageWindowState {
@@ -189,16 +192,45 @@ fn fetch_measurement_health(recorder: State<'_, Arc<UsageRecorder>>) -> Measurem
     recorder.health()
 }
 
-fn update_autostart(autostart: &AutoLaunchManager, enabled: bool) -> Result<bool, String> {
-    let result = if enabled {
-        autostart.enable()
-    } else {
-        autostart.disable()
-    };
+trait AutostartControl {
+    fn enable_autostart(&self) -> Result<(), String>;
+    fn disable_autostart(&self) -> Result<(), String>;
+    fn autostart_is_enabled(&self) -> Result<bool, String>;
+}
 
-    result
-        .and_then(|_| autostart.is_enabled())
-        .map_err(|err| err.to_string())
+impl AutostartControl for AutoLaunchManager {
+    fn enable_autostart(&self) -> Result<(), String> {
+        self.enable().map_err(|err| err.to_string())
+    }
+
+    fn disable_autostart(&self) -> Result<(), String> {
+        self.disable().map_err(|err| err.to_string())
+    }
+
+    fn autostart_is_enabled(&self) -> Result<bool, String> {
+        self.is_enabled().map_err(|err| err.to_string())
+    }
+}
+
+fn update_autostart(autostart: &AutoLaunchManager, enabled: bool) -> Result<bool, String> {
+    update_autostart_for_mode(autostart, enabled, tauri::is_dev())
+}
+
+fn update_autostart_for_mode(
+    autostart: &impl AutostartControl,
+    enabled: bool,
+    dev_mode: bool,
+) -> Result<bool, String> {
+    // A Tauri dev binary loads its UI from devUrl. Registering that binary with
+    // the OS leaves a blank window after login because the dev server is absent.
+    let enabled = enabled && !dev_mode;
+    if enabled {
+        autostart.enable_autostart()?;
+    } else {
+        autostart.disable_autostart()?;
+    }
+
+    autostart.autostart_is_enabled()
 }
 
 fn current_utc_ms() -> u64 {
@@ -211,10 +243,6 @@ fn current_utc_ms() -> u64 {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // GUI launches (including macOS LaunchAgents) do not inherit shell environment
-    // variables. Set this before Tauri starts so its child processes inherit it too.
-    env::set_var("NO_COLOR", "1");
-
     let startup_instant = Instant::now();
 
     let builder = tauri::Builder::default()
@@ -224,10 +252,12 @@ pub fn run() {
             |_app, _args, _working_directory| {},
         ))
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_autostart::init(
-            MacosLauncher::LaunchAgent,
-            None,
-        ))
+        .plugin({
+            let builder = tauri_plugin_autostart::Builder::new().app_name(AUTOSTART_APP_NAME);
+            #[cfg(target_os = "macos")]
+            let builder = builder.macos_launcher(MacosLauncher::LaunchAgent);
+            builder.build()
+        })
         .invoke_handler(tauri::generate_handler![
             complete_onboarding,
             delete_all_usage_history,
@@ -243,6 +273,14 @@ pub fn run() {
         .setup(|app| {
             app.manage(UsageWindowState::default());
             let mut onboarding_required = true;
+
+            // Remove registrations created by older dev builds. Packaged builds
+            // keep the user's configured automatic-launch preference.
+            if tauri::is_dev() {
+                if let Err(err) = update_autostart(&app.state::<AutoLaunchManager>(), false) {
+                    eprintln!("failed to remove development autostart registration: {err}");
+                }
+            }
 
             let app_usage_recorder = AppUsageRecorder::default();
             if let Err(err) = app_usage_recorder.record_current_processes() {
@@ -585,6 +623,7 @@ async fn fetch_app_usage_records(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::Cell;
     use std::sync::{atomic::Ordering, Mutex};
 
     #[test]
@@ -607,6 +646,55 @@ mod tests {
     fn usage_window_state_defaults_to_hidden() {
         let state = UsageWindowState::default();
         assert!(!state.visible.load(Ordering::SeqCst));
+    }
+
+    #[derive(Default)]
+    struct MockAutostart {
+        enabled: Cell<bool>,
+        enable_calls: Cell<u32>,
+        disable_calls: Cell<u32>,
+    }
+
+    impl AutostartControl for MockAutostart {
+        fn enable_autostart(&self) -> Result<(), String> {
+            self.enable_calls.set(self.enable_calls.get() + 1);
+            self.enabled.set(true);
+            Ok(())
+        }
+
+        fn disable_autostart(&self) -> Result<(), String> {
+            self.disable_calls.set(self.disable_calls.get() + 1);
+            self.enabled.set(false);
+            Ok(())
+        }
+
+        fn autostart_is_enabled(&self) -> Result<bool, String> {
+            Ok(self.enabled.get())
+        }
+    }
+
+    #[test]
+    fn dev_mode_removes_autostart_instead_of_registering_dev_binary() {
+        let autostart = MockAutostart::default();
+
+        let enabled = update_autostart_for_mode(&autostart, true, true).unwrap();
+
+        assert!(!enabled);
+        assert_eq!(autostart.enable_calls.get(), 0);
+        assert_eq!(autostart.disable_calls.get(), 1);
+    }
+
+    #[test]
+    fn packaged_mode_follows_autostart_preference() {
+        let autostart = MockAutostart::default();
+
+        assert!(update_autostart_for_mode(&autostart, true, false).unwrap());
+        assert_eq!(autostart.enable_calls.get(), 1);
+        assert_eq!(autostart.disable_calls.get(), 0);
+
+        assert!(!update_autostart_for_mode(&autostart, false, false).unwrap());
+        assert_eq!(autostart.enable_calls.get(), 1);
+        assert_eq!(autostart.disable_calls.get(), 1);
     }
 
     struct MockWindow {
