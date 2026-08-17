@@ -86,7 +86,7 @@ jobs:
         run: rustup show active-toolchain
 
       - name: Install trunk
-        uses: jetli/trunk-action@69821d4eec12c308c4b811e459e37556cf920057 # v0.5.0
+        uses: jetli/trunk-action@1346cc09eace4beb84e403e199a471346d4684c9 # v0.5.1
         with:
           version: 'latest'
 
@@ -138,7 +138,7 @@ jobs:
         run: cargo test -p time-wise --lib
 
       - name: Install trunk
-        uses: jetli/trunk-action@69821d4eec12c308c4b811e459e37556cf920057 # v0.5.0
+        uses: jetli/trunk-action@1346cc09eace4beb84e403e199a471346d4684c9 # v0.5.1
         with:
           version: 'latest'
 
