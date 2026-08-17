@@ -31,7 +31,9 @@ use tauri::{PhysicalPosition, Position};
 use sysinfo::{get_current_pid, ProcessRefreshKind, ProcessesToUpdate, RefreshKind, System};
 #[cfg(not(target_os = "linux"))]
 use tauri::tray::TrayIconEvent;
-use tauri_plugin_autostart::{AutoLaunchManager, MacosLauncher};
+use tauri_plugin_autostart::AutoLaunchManager;
+#[cfg(target_os = "macos")]
+use tauri_plugin_autostart::MacosLauncher;
 
 trait WindowLike {
     fn hide_window(&self);
