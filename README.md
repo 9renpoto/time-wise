@@ -3,11 +3,15 @@
 [![CI](https://github.com/umeno3/time-wise/actions/workflows/ci.yml/badge.svg)](https://github.com/umeno3/time-wise/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/github/umeno3/time-wise/graph/badge.svg?token=AN6oYXhAyl)](https://codecov.io/github/umeno3/time-wise)
 
-Time Wise is a ScreenTime clone built with Tauri and Leptos. Thanks to Tauri's
-multi-platform runtime, the desktop app runs on macOS, Windows, and Linux with
-a shared code base.
+Time Wise is a Screen Time-inspired desktop app built with Tauri v2 and Leptos.
+Windows and macOS are the supported and distributed v1 platforms. Linux keeps
+the shared portable core and an adapter boundary, but is not officially
+supported.
 
-This template should help get you started developing with Tauri and Leptos.
+## Project management
+
+Tasks and progress are tracked in [GitHub Issues](https://github.com/9renpoto/time-wise/issues).
+Product and technical decisions are recorded in [architecture decision records](./docs/adr/).
 
 ## Recommended IDE Setup
 
@@ -19,7 +23,7 @@ This template should help get you started developing with Tauri and Leptos.
 
 To get started, you need to have [rustup](https://rustup.rs/) and the Tauri CLI installed.
 
-Follow the instructions on the [Tauri website](https://tauri.app/v1/guides/getting-started/prerequisites) to set up your environment.
+Follow the [Tauri v2 prerequisites](https://v2.tauri.app/start/prerequisites/) to set up your environment.
 
 The Rust toolchain itself is declared in `rust-toolchain.toml`, so rustup installs the correct channel, components, and the `wasm32-unknown-unknown` target on the first build. You do not need to select a toolchain manually.
 
