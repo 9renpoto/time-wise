@@ -1,6 +1,6 @@
 # Time Wise
 
-[![CI](https://github.com/umeno3/time-wise/actions/workflows/ci.yml/badge.svg)](https://github.com/umeno3/time-wise/actions/workflows/ci.yml)
+[![CI](https://github.com/9renpoto/time-wise/actions/workflows/ci.yml/badge.svg)](https://github.com/9renpoto/time-wise/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/github/umeno3/time-wise/graph/badge.svg?token=AN6oYXhAyl)](https://codecov.io/github/umeno3/time-wise)
 
 Time Wise is a ScreenTime clone built with Tauri and Leptos. Thanks to Tauri's
