@@ -11,7 +11,7 @@ on:
 jobs:
   zizmor:
     name: zizmor
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     permissions:
       security-events: write
       contents: read
