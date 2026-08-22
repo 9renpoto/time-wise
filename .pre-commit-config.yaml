@@ -1,6 +1,11 @@
 fail_fast: true
 
 repos:
+  - repo: https://github.com/zizmorcore/zizmor-pre-commit
+    rev: v1.29.0
+    hooks:
+      - id: zizmor
+
   - repo: local
     hooks:
       - id: gitleaks
