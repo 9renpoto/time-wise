@@ -1,7 +1,7 @@
 # Time Wise
 
 [![CI](https://github.com/9renpoto/time-wise/actions/workflows/ci.yml/badge.svg)](https://github.com/9renpoto/time-wise/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/github/umeno3/time-wise/graph/badge.svg?token=AN6oYXhAyl)](https://codecov.io/github/umeno3/time-wise)
+[![codecov](https://codecov.io/gh/9renpoto/time-wise/graph/badge.svg?token=Fwk8L6cDp3)](https://codecov.io/gh/9renpoto/time-wise)
 
 Time Wise is a ScreenTime clone built with Tauri and Leptos. Thanks to Tauri's
 multi-platform runtime, the desktop app runs on macOS, Windows, and Linux with
