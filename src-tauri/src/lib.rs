@@ -742,4 +742,32 @@ mod tests {
         assert_eq!(window.hide_count(), 1);
         assert_eq!(window.last_always_on_top(), Some(false));
     }
+
+    #[test]
+    fn test_extract_app_name() {
+        assert_eq!(
+            extract_app_name("/Applications/Focus.app/Contents/MacOS/Focus"),
+            Some("Focus".to_string())
+        );
+        assert_eq!(
+            extract_app_name("/Program Files/Editor/Editor.exe"),
+            Some("Editor".to_string())
+        );
+        assert_eq!(extract_app_name("/usr/local/bin/my_tool"), None);
+        assert_eq!(
+            extract_app_name("/Applications/.app/Contents/MacOS/Tool"),
+            None
+        );
+    }
+
+    #[test]
+    fn test_current_utc_ms() {
+        assert!(current_utc_ms() > 0);
+    }
+
+    #[test]
+    fn test_resolve_launcher_name() {
+        let name = resolve_launcher_name();
+        assert!(!name.is_empty());
+    }
 }

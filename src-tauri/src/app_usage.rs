@@ -418,4 +418,88 @@ mod tests {
         assert!(record.total_active_ms >= 20);
         assert!(!record.active);
     }
+
+    #[test]
+    fn stale_entries_are_purged_after_grace_period() {
+        let recorder = AppUsageRecorder::new();
+        let instant_start = Instant::now();
+        let system_start = SystemTime::now();
+
+        recorder.record_mock_snapshot(
+            vec![ProcessSnapshot::for_tests(
+                "App1",
+                Some("/Applications/App1.app/Contents/MacOS/App1"),
+            )],
+            instant_start,
+            system_start,
+        );
+
+        // Mark inactive
+        let instant_inactive = instant_start + Duration::from_secs(1);
+        let system_inactive = system_start + Duration::from_secs(1);
+        recorder.record_mock_snapshot(Vec::new(), instant_inactive, system_inactive);
+
+        // Within grace period (4 mins)
+        let instant_within = instant_inactive + Duration::from_secs(4 * 60);
+        let system_within = system_inactive + Duration::from_secs(4 * 60);
+        recorder.record_mock_snapshot(Vec::new(), instant_within, system_within);
+        assert_eq!(recorder.records_at(instant_within, system_within).len(), 1);
+
+        // Beyond grace period (> 5 mins)
+        let instant_beyond = instant_inactive + Duration::from_secs(6 * 60);
+        let system_beyond = system_inactive + Duration::from_secs(6 * 60);
+        recorder.record_mock_snapshot(Vec::new(), instant_beyond, system_beyond);
+        assert_eq!(recorder.records_at(instant_beyond, system_beyond).len(), 0);
+    }
+
+    #[test]
+    fn system_time_regression_purges_inactive_entry() {
+        let recorder = AppUsageRecorder::new();
+        let instant_start = Instant::now();
+        let system_start = SystemTime::now();
+
+        recorder.record_mock_snapshot(
+            vec![ProcessSnapshot::for_tests(
+                "App1",
+                Some("/Applications/App1.app/Contents/MacOS/App1"),
+            )],
+            instant_start,
+            system_start,
+        );
+
+        let instant_inactive = instant_start + Duration::from_secs(1);
+        let system_inactive = system_start
+            .checked_sub(Duration::from_secs(10))
+            .unwrap_or(system_start);
+        recorder.record_mock_snapshot(Vec::new(), instant_inactive, system_inactive);
+
+        assert_eq!(
+            recorder.records_at(instant_inactive, system_inactive).len(),
+            0
+        );
+    }
+
+    #[test]
+    fn duration_and_system_time_conversion_helpers() {
+        assert_eq!(duration_to_ms(Duration::from_millis(1234)), 1234);
+        assert_eq!(
+            system_time_to_ms(UNIX_EPOCH + Duration::from_millis(5678)),
+            5678
+        );
+        assert_eq!(
+            system_time_to_ms(
+                UNIX_EPOCH
+                    .checked_sub(Duration::from_secs(10))
+                    .unwrap_or(UNIX_EPOCH)
+            ),
+            0
+        );
+    }
+
+    #[test]
+    fn recorder_default_and_record_current_processes() {
+        let recorder = AppUsageRecorder::default();
+        let res = recorder.record_current_processes();
+        assert!(res.is_ok());
+    }
 }
