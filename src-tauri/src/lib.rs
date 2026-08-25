@@ -754,7 +754,10 @@ mod tests {
             Some("Editor".to_string())
         );
         assert_eq!(extract_app_name("/usr/local/bin/my_tool"), None);
-        assert_eq!(extract_app_name("/Applications/.app/Contents/MacOS/Tool"), None);
+        assert_eq!(
+            extract_app_name("/Applications/.app/Contents/MacOS/Tool"),
+            None
+        );
     }
 
     #[test]

@@ -468,17 +468,32 @@ mod tests {
         );
 
         let instant_inactive = instant_start + Duration::from_secs(1);
-        let system_inactive = system_start.checked_sub(Duration::from_secs(10)).unwrap_or(system_start);
+        let system_inactive = system_start
+            .checked_sub(Duration::from_secs(10))
+            .unwrap_or(system_start);
         recorder.record_mock_snapshot(Vec::new(), instant_inactive, system_inactive);
 
-        assert_eq!(recorder.records_at(instant_inactive, system_inactive).len(), 0);
+        assert_eq!(
+            recorder.records_at(instant_inactive, system_inactive).len(),
+            0
+        );
     }
 
     #[test]
     fn duration_and_system_time_conversion_helpers() {
         assert_eq!(duration_to_ms(Duration::from_millis(1234)), 1234);
-        assert_eq!(system_time_to_ms(UNIX_EPOCH + Duration::from_millis(5678)), 5678);
-        assert_eq!(system_time_to_ms(UNIX_EPOCH.checked_sub(Duration::from_secs(10)).unwrap_or(UNIX_EPOCH)), 0);
+        assert_eq!(
+            system_time_to_ms(UNIX_EPOCH + Duration::from_millis(5678)),
+            5678
+        );
+        assert_eq!(
+            system_time_to_ms(
+                UNIX_EPOCH
+                    .checked_sub(Duration::from_secs(10))
+                    .unwrap_or(UNIX_EPOCH)
+            ),
+            0
+        );
     }
 
     #[test]
