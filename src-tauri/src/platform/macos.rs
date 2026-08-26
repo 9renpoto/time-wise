@@ -5,12 +5,15 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use objc2::rc::{autoreleasepool, Retained};
+use objc2::runtime::AnyObject;
 use objc2::{define_class, msg_send, sel, AnyThread, DefinedClass};
 use objc2_app_kit::{
-    NSWorkspace, NSWorkspaceDidWakeNotification, NSWorkspaceWillSleepNotification,
+    NSBitmapImageFileType, NSBitmapImageRep, NSBitmapImageRepPropertyKey, NSImage, NSWorkspace,
+    NSWorkspaceDidWakeNotification, NSWorkspaceWillSleepNotification,
 };
 use objc2_foundation::{
-    ns_string, NSDistributedNotificationCenter, NSNotification, NSNotificationCenter, NSObject,
+    ns_string, NSDictionary, NSDistributedNotificationCenter, NSNotification, NSNotificationCenter,
+    NSObject,
 };
 
 use super::{DesktopEvent, DesktopEventKind, ObservationFailure, ProcessIdentity};
@@ -218,6 +221,7 @@ fn observe_frontmost_application() -> DesktopEvent {
             .bundleIdentifier()
             .map(|identifier| identifier.to_string())
     };
+    let icon_png = unsafe { application.icon() }.as_deref().and_then(image_png);
 
     DesktopEvent::foreground(
         Some(ProcessIdentity {
@@ -225,15 +229,31 @@ fn observe_frontmost_application() -> DesktopEvent {
             executable,
             bundle_identifier,
             product_name,
+            icon_png,
             ..ProcessIdentity::default()
         }),
         None,
     )
 }
 
+fn image_png(image: &NSImage) -> Option<Vec<u8>> {
+    // NSRunningApplication provides an NSImage whose backing representation may
+    // vary by application. TIFF is AppKit's common interchange representation;
+    // NSBitmapImageRep then produces bytes that browsers can display directly.
+    let tiff = unsafe { image.TIFFRepresentation() }?;
+    let bitmap = unsafe { NSBitmapImageRep::imageRepWithData(&tiff) }?;
+    let properties = NSDictionary::<NSBitmapImageRepPropertyKey, AnyObject>::new();
+    let png = unsafe {
+        bitmap.representationUsingType_properties(NSBitmapImageFileType::PNG, &properties)
+    }?;
+    (!png.is_empty()).then(|| png.to_vec())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use objc2::AnyThread;
+    use objc2_foundation::NSData;
 
     #[test]
     fn lifecycle_signals_map_to_desktop_events() {
@@ -254,5 +274,25 @@ mod tests {
         ] {
             assert_eq!(lifecycle_event_kind(signal), expected);
         }
+    }
+
+    #[test]
+    fn image_png_encodes_an_appkit_image() {
+        autoreleasepool(|_| {
+            let source = NSData::with_bytes(include_bytes!("../../icons/32x32.png"));
+            let image = NSImage::initWithData(NSImage::alloc(), &source).expect("valid PNG");
+
+            let encoded = image_png(&image).expect("AppKit should encode the image");
+
+            assert!(encoded.starts_with(b"\x89PNG\r\n\x1a\n"));
+        });
+    }
+
+    #[test]
+    fn invalid_image_data_does_not_produce_png() {
+        autoreleasepool(|_| {
+            let source = NSData::with_bytes(b"not an image");
+            assert!(NSImage::initWithData(NSImage::alloc(), &source).is_none());
+        });
     }
 }
