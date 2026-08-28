@@ -1,15 +1,14 @@
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Arc};
-use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::sync::mpsc;
 
 use objc2::rc::{autoreleasepool, Retained};
 use objc2::runtime::AnyObject;
 use objc2::{define_class, msg_send, sel, AnyThread, DefinedClass};
 use objc2_app_kit::{
-    NSBitmapImageFileType, NSBitmapImageRep, NSBitmapImageRepPropertyKey, NSImage, NSWorkspace,
-    NSWorkspaceDidWakeNotification, NSWorkspaceWillSleepNotification,
+    NSBitmapImageFileType, NSBitmapImageRep, NSBitmapImageRepPropertyKey, NSImage,
+    NSRunningApplication, NSWorkspace, NSWorkspaceApplicationKey,
+    NSWorkspaceDidActivateApplicationNotification, NSWorkspaceDidWakeNotification,
+    NSWorkspaceWillSleepNotification,
 };
 use objc2_foundation::{
     ns_string, NSDictionary, NSDistributedNotificationCenter, NSNotification, NSNotificationCenter,
@@ -18,11 +17,7 @@ use objc2_foundation::{
 
 use super::{DesktopEvent, DesktopEventKind, ObservationFailure, ProcessIdentity};
 
-const POLL_INTERVAL: Duration = Duration::from_millis(500);
-
 pub struct EventProbe {
-    stopped: Arc<AtomicBool>,
-    thread: Option<JoinHandle<()>>,
     lifecycle_observer: Retained<LifecycleObserver>,
     workspace_center: Retained<NSNotificationCenter>,
     distributed_center: Retained<NSDistributedNotificationCenter>,
@@ -40,10 +35,6 @@ impl Drop for EventProbe {
                 None,
                 None,
             );
-        }
-        self.stopped.store(true, Ordering::Release);
-        if let Some(thread) = self.thread.take() {
-            let _ = thread.join();
         }
     }
 }
@@ -97,6 +88,17 @@ define_class!(
         fn system_did_wake(&self, _notification: &NSNotification) {
             self.emit(LifecycleSignal::SystemDidWake);
         }
+
+        #[unsafe(method(applicationActivated:))]
+        fn application_activated(&self, notification: &NSNotification) {
+            let event = autoreleasepool(|_| {
+                let application = application_from_notification(notification);
+                application
+                    .as_deref()
+                    .map_or_else(observe_missing_application, observe_application)
+            });
+            let _ = self.ivars().sender.send(event);
+        }
     }
 );
 
@@ -135,6 +137,12 @@ pub fn start_event_probe() -> Result<(EventProbe, mpsc::Receiver<DesktopEvent>),
             Some(NSWorkspaceDidWakeNotification),
             None,
         );
+        workspace_center.addObserver_selector_name_object(
+            &lifecycle_observer,
+            sel!(applicationActivated:),
+            Some(NSWorkspaceDidActivateApplicationNotification),
+            None,
+        );
 
         let distributed_center = NSDistributedNotificationCenter::defaultCenter();
         distributed_center.addObserver_selector_name_object(
@@ -152,30 +160,10 @@ pub fn start_event_probe() -> Result<(EventProbe, mpsc::Receiver<DesktopEvent>),
         (workspace_center, distributed_center)
     };
 
-    let stopped = Arc::new(AtomicBool::new(false));
-    let thread_stopped = stopped.clone();
-    let thread = thread::Builder::new()
-        .name("macos-foreground-probe".to_string())
-        .spawn(move || {
-            let mut last_process_id = None;
-            while !thread_stopped.load(Ordering::Acquire) {
-                let event = autoreleasepool(|_| observe_frontmost_application());
-                let process_id = event.process.as_ref().map(|process| process.process_id);
-                if process_id != last_process_id {
-                    last_process_id = process_id;
-                    if sender.send(event).is_err() {
-                        break;
-                    }
-                }
-                thread::sleep(POLL_INTERVAL);
-            }
-        })
-        .map_err(|err| format!("failed to spawn macOS observer thread: {err}"))?;
+    let _ = sender.send(autoreleasepool(|_| observe_frontmost_application()));
 
     Ok((
         EventProbe {
-            stopped,
-            thread: Some(thread),
             lifecycle_observer,
             workspace_center,
             distributed_center,
@@ -184,17 +172,27 @@ pub fn start_event_probe() -> Result<(EventProbe, mpsc::Receiver<DesktopEvent>),
     ))
 }
 
-fn observe_frontmost_application() -> DesktopEvent {
-    // SAFETY: These AppKit accessors return retained immutable objects. Each call
-    // is made inside an autorelease pool owned by the observer thread.
-    let application = unsafe { NSWorkspace::sharedWorkspace().frontmostApplication() };
-    let Some(application) = application else {
-        return DesktopEvent::foreground(
-            None,
-            Some(ObservationFailure::ForegroundWindowUnavailable),
-        );
-    };
+fn observe_missing_application() -> DesktopEvent {
+    DesktopEvent::foreground(None, Some(ObservationFailure::ForegroundWindowUnavailable))
+}
 
+fn observe_frontmost_application() -> DesktopEvent {
+    let application = unsafe { NSWorkspace::sharedWorkspace().frontmostApplication() };
+    application
+        .as_deref()
+        .map_or_else(observe_missing_application, observe_application)
+}
+
+fn application_from_notification(
+    notification: &NSNotification,
+) -> Option<Retained<NSRunningApplication>> {
+    notification
+        .userInfo()
+        .and_then(|user_info| user_info.objectForKey(NSWorkspaceApplicationKey))
+        .and_then(|object| object.downcast::<NSRunningApplication>().ok())
+}
+
+fn observe_application(application: &NSRunningApplication) -> DesktopEvent {
     // SAFETY: NSRunningApplication properties are immutable snapshots for the
     // running process and are copied into Rust-owned values before returning.
     let process_id = unsafe { application.processIdentifier() };
@@ -293,6 +291,25 @@ mod tests {
         autoreleasepool(|_| {
             let source = NSData::with_bytes(b"not an image");
             assert!(NSImage::initWithData(NSImage::alloc(), &source).is_none());
+        });
+    }
+
+    #[test]
+    fn activation_without_application_is_reported_as_unavailable() {
+        autoreleasepool(|_| {
+            let notification = unsafe {
+                NSNotification::initWithName_object_userInfo(
+                    NSNotification::alloc(),
+                    NSWorkspaceDidActivateApplicationNotification,
+                    None,
+                    None,
+                )
+            };
+            assert!(application_from_notification(&notification).is_none());
+            assert_eq!(
+                observe_missing_application().failure,
+                Some(ObservationFailure::ForegroundWindowUnavailable)
+            );
         });
     }
 }
