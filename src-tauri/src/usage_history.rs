@@ -1,7 +1,14 @@
 //! SQLite persistence for application usage history.
 
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
-use std::{path::PathBuf, sync::Mutex};
+use std::{
+    io::Read,
+    path::Path,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
+
+use crate::secure_storage::{default_key_store, load_or_create, KeyStore, USAGE_HISTORY_KEY_ID};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppMetadata {
@@ -48,12 +55,37 @@ pub struct UsageHistoryStore {
 
 impl UsageHistoryStore {
     pub fn with_storage_path(path: PathBuf) -> Result<Self, String> {
+        Self::with_storage_path_and_key_store(path, default_key_store())
+    }
+
+    pub fn with_storage_path_and_key_store(
+        path: PathBuf,
+        key_store: Arc<dyn KeyStore>,
+    ) -> Result<Self, String> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
         }
+        discard_unencrypted_database(&path)?;
+        let key = load_or_create(key_store.as_ref(), USAGE_HISTORY_KEY_ID)?;
         let connection = Connection::open(path).map_err(|error| error.to_string())?;
+        // SQLCipher is compiled into rusqlite for every supported desktop target.
+        // The key is applied through the native API before SQLite reads page 1.
+        let result = unsafe {
+            rusqlite::ffi::sqlite3_key(
+                connection.handle(),
+                key.as_ptr().cast(),
+                key.len()
+                    .try_into()
+                    .map_err(|_| "database key is too long")?,
+            )
+        };
+        if result != rusqlite::ffi::SQLITE_OK {
+            return Err(format!(
+                "failed to unlock encrypted usage database (SQLite code {result})"
+            ));
+        }
         connection
-            .execute_batch("PRAGMA foreign_keys = ON;")
+            .execute_batch("PRAGMA foreign_keys = ON; SELECT count(*) FROM sqlite_master;")
             .map_err(|error| error.to_string())?;
         Self::migrate(&connection).map_err(|error| error.to_string())?;
         Ok(Self {
@@ -314,6 +346,58 @@ impl UsageHistoryStore {
     }
 }
 
+const SQLITE_HEADER: &[u8; 16] = b"SQLite format 3\0";
+
+fn discard_unencrypted_database(path: &Path) -> Result<(), String> {
+    if !path.is_file() {
+        return Ok(());
+    }
+    let mut file = std::fs::File::open(path)
+        .map_err(|error| format!("failed to inspect usage database: {error}"))?;
+    if !has_unencrypted_sqlite_header(&mut file)
+        .map_err(|error| format!("failed to inspect usage database: {error}"))?
+    {
+        return Ok(());
+    }
+
+    for sidecar in plaintext_sidecar_paths(path) {
+        remove_plaintext_file_if_present(&sidecar)?;
+    }
+    remove_plaintext_file_if_present(path)?;
+    Ok(())
+}
+
+fn has_unencrypted_sqlite_header(reader: &mut impl Read) -> std::io::Result<bool> {
+    let mut header = [0; SQLITE_HEADER.len()];
+    match reader.read_exact(&mut header) {
+        Ok(()) => Ok(&header == SQLITE_HEADER),
+        Err(error) if error.kind() == std::io::ErrorKind::UnexpectedEof => Ok(false),
+        Err(error) => Err(error),
+    }
+}
+
+fn plaintext_sidecar_paths(path: &Path) -> Vec<PathBuf> {
+    ["-wal", "-shm", "-journal"]
+        .into_iter()
+        .map(|suffix| {
+            let mut sidecar = path.as_os_str().to_os_string();
+            sidecar.push(suffix);
+            PathBuf::from(sidecar)
+        })
+        .collect()
+}
+
+fn remove_plaintext_file_if_present(path: &Path) -> Result<(), String> {
+    match std::fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!(
+            "failed to discard unencrypted usage database file {}: {error}",
+            path.display()
+        )),
+    }
+}
+
 fn validate_session(session: &NewUsageSession<'_>) -> Result<(), String> {
     if session.ended_at_utc_ms < session.started_at_utc_ms {
         return Err("usage session ends before it starts".to_string());
@@ -338,12 +422,114 @@ fn sql_timestamp(value: u64) -> Result<i64, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::secure_storage::MemoryKeyStore;
+    use std::io::Cursor;
 
     fn store() -> (tempfile::TempDir, UsageHistoryStore) {
         let directory = tempfile::tempdir().unwrap();
         let store =
             UsageHistoryStore::with_storage_path(directory.path().join("usage.sqlite")).unwrap();
         (directory, store)
+    }
+
+    #[test]
+    fn encrypted_database_can_be_reopened_with_the_stored_key() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("usage.sqlite");
+        let key_store = Arc::new(MemoryKeyStore::new(None));
+        let store =
+            UsageHistoryStore::with_storage_path_and_key_store(path.clone(), key_store.clone())
+                .unwrap();
+        store.set_setting("secret", "known-value", 1).unwrap();
+        drop(store);
+
+        let reopened = UsageHistoryStore::with_storage_path_and_key_store(path, key_store).unwrap();
+        assert_eq!(
+            reopened.setting("secret").unwrap().as_deref(),
+            Some("known-value")
+        );
+    }
+
+    #[test]
+    fn encrypted_database_rejects_a_different_key() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("usage.sqlite");
+        let first_key = Arc::new(MemoryKeyStore::new(Some(vec![7; 32])));
+        UsageHistoryStore::with_storage_path_and_key_store(path.clone(), first_key).unwrap();
+
+        let different_key = Arc::new(MemoryKeyStore::new(Some(vec![8; 32])));
+        let result = UsageHistoryStore::with_storage_path_and_key_store(path, different_key);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn credential_store_failure_does_not_create_a_database() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("usage.sqlite");
+        let result = UsageHistoryStore::with_storage_path_and_key_store(
+            path.clone(),
+            Arc::new(MemoryKeyStore::failing()),
+        );
+        assert!(result.is_err());
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn existing_plaintext_database_is_discarded() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("usage.sqlite");
+        let plain = Connection::open(&path).unwrap();
+        plain
+            .execute_batch(
+                "CREATE TABLE leaked (value TEXT); INSERT INTO leaked VALUES ('known-value');",
+            )
+            .unwrap();
+        drop(plain);
+        let sidecars = plaintext_sidecar_paths(&path);
+        for sidecar in &sidecars {
+            std::fs::write(sidecar, b"known-value in plaintext sidecar").unwrap();
+        }
+
+        let store = UsageHistoryStore::with_storage_path_and_key_store(
+            path.clone(),
+            Arc::new(MemoryKeyStore::new(None)),
+        )
+        .unwrap();
+        assert!(store.setting("secret").unwrap().is_none());
+        assert!(sidecars.iter().all(|sidecar| !sidecar.exists()));
+        let bytes = std::fs::read(path).unwrap();
+        assert!(!bytes
+            .windows(b"known-value".len())
+            .any(|window| window == b"known-value"));
+    }
+
+    #[test]
+    fn plaintext_detection_reads_only_the_sqlite_header() {
+        let mut bytes = SQLITE_HEADER.to_vec();
+        bytes.extend(std::iter::repeat_n(42, 1_024));
+        let mut reader = Cursor::new(bytes);
+
+        assert!(has_unencrypted_sqlite_header(&mut reader).unwrap());
+        assert_eq!(reader.position(), SQLITE_HEADER.len() as u64);
+    }
+
+    #[test]
+    fn regular_sqlite_cannot_read_encrypted_content() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("usage.sqlite");
+        let store = UsageHistoryStore::with_storage_path_and_key_store(
+            path.clone(),
+            Arc::new(MemoryKeyStore::new(Some(vec![9; 32]))),
+        )
+        .unwrap();
+        store.set_setting("secret", "known-value", 1).unwrap();
+        drop(store);
+
+        let regular_connection = Connection::open(path).unwrap();
+        assert!(regular_connection
+            .query_row("SELECT value FROM settings", [], |row| row
+                .get::<_, String>(0))
+            .is_err());
     }
 
     #[test]

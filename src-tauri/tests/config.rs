@@ -95,6 +95,7 @@ fn windows_api_dependency_is_target_specific() {
         .filter_map(toml::Value::as_str)
         .collect::<Vec<_>>();
     for required in [
+        "Win32_Security_Credentials",
         "Win32_System_Power",
         "Win32_System_RemoteDesktop",
         "Win32_System_Threading",
@@ -103,6 +104,17 @@ fn windows_api_dependency_is_target_specific() {
     ] {
         assert!(features.contains(&required), "missing feature: {required}");
     }
+
+    let windows_dependencies = &manifest["target"]["cfg(target_os = \"windows\")"]["dependencies"];
+    assert!(
+        windows_dependencies.get("keyring").is_none(),
+        "Windows credentials must use an explicit local-machine persistence policy"
+    );
+    assert_eq!(
+        manifest["target"]["cfg(target_os = \"macos\")"]["dependencies"]["keyring"]["features"][0]
+            .as_str(),
+        Some("apple-native")
+    );
 }
 
 #[test]
