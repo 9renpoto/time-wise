@@ -186,10 +186,15 @@ fn observe_frontmost_application() -> DesktopEvent {
 fn application_from_notification(
     notification: &NSNotification,
 ) -> Option<Retained<NSRunningApplication>> {
-    notification
-        .userInfo()
-        .and_then(|user_info| user_info.objectForKey(NSWorkspaceApplicationKey))
-        .and_then(|object| object.downcast::<NSRunningApplication>().ok())
+    // SAFETY: Workspace activation notifications are created by AppKit, and
+    // NSWorkspaceApplicationKey is an AppKit-owned NSString constant. The
+    // retrieved object is type-checked below before it is used.
+    let application = unsafe {
+        notification
+            .userInfo()
+            .and_then(|user_info| user_info.objectForKey(NSWorkspaceApplicationKey))
+    };
+    application.and_then(|object| object.downcast::<NSRunningApplication>().ok())
 }
 
 fn observe_application(application: &NSRunningApplication) -> DesktopEvent {
@@ -250,7 +255,7 @@ fn image_png(image: &NSImage) -> Option<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use objc2::AnyThread;
+    use objc2::{AnyThread, ClassType};
     use objc2_foundation::NSData;
 
     #[test]
@@ -310,6 +315,38 @@ mod tests {
                 observe_missing_application().failure,
                 Some(ObservationFailure::ForegroundWindowUnavailable)
             );
+        });
+    }
+
+    #[test]
+    fn activation_notification_returns_the_running_application() {
+        autoreleasepool(|_| {
+            // SAFETY: AppKit owns the current running application and the
+            // workspace application key. NSDictionary retains both objects.
+            let (application, user_info) = unsafe {
+                let application = NSRunningApplication::currentApplication();
+                let user_info: Retained<NSDictionary> = msg_send![
+                    NSDictionary::<AnyObject, AnyObject>::class(),
+                    dictionaryWithObject: application.as_super().as_super(),
+                    forKey: NSWorkspaceApplicationKey
+                ];
+                (application, user_info)
+            };
+            // SAFETY: The notification name and userInfo dictionary are valid
+            // AppKit/Foundation objects retained for the notification lifetime.
+            let notification = unsafe {
+                NSNotification::initWithName_object_userInfo(
+                    NSNotification::alloc(),
+                    NSWorkspaceDidActivateApplicationNotification,
+                    None,
+                    Some(&user_info),
+                )
+            };
+
+            let observed = application_from_notification(&notification)
+                .expect("workspace application should be present");
+
+            assert_eq!(observed, application);
         });
     }
 }
