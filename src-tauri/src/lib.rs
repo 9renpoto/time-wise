@@ -273,7 +273,7 @@ pub fn run() {
         ])
         .setup(|app| {
             app.manage(UsageWindowState::default());
-            let mut onboarding_required = true;
+            let onboarding_required;
 
             // Remove registrations created by older dev builds. Packaged builds
             // keep the user's configured automatic-launch preference.
@@ -354,7 +354,12 @@ pub fn run() {
                     });
                     app.manage(recorder);
                 }
-                Err(err) => eprintln!("failed to initialize usage history database: {err}"),
+                Err(err) => {
+                    return Err(std::io::Error::other(format!(
+                        "failed to initialize usage history database: {err}"
+                    ))
+                    .into());
+                }
             }
 
             tauri::WebviewWindowBuilder::new(

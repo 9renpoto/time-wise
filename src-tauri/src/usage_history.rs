@@ -2,6 +2,8 @@
 
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 use std::{
+    io::Read,
+    path::Path,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
@@ -344,16 +346,56 @@ impl UsageHistoryStore {
     }
 }
 
-fn discard_unencrypted_database(path: &std::path::Path) -> Result<(), String> {
+const SQLITE_HEADER: &[u8; 16] = b"SQLite format 3\0";
+
+fn discard_unencrypted_database(path: &Path) -> Result<(), String> {
     if !path.is_file() {
         return Ok(());
     }
-    let bytes = std::fs::read(path).map_err(|error| error.to_string())?;
-    if bytes.starts_with(b"SQLite format 3\0") {
-        std::fs::remove_file(path)
-            .map_err(|error| format!("failed to discard unencrypted usage database: {error}"))?;
+    let mut file = std::fs::File::open(path)
+        .map_err(|error| format!("failed to inspect usage database: {error}"))?;
+    if !has_unencrypted_sqlite_header(&mut file)
+        .map_err(|error| format!("failed to inspect usage database: {error}"))?
+    {
+        return Ok(());
     }
+
+    for sidecar in plaintext_sidecar_paths(path) {
+        remove_plaintext_file_if_present(&sidecar)?;
+    }
+    remove_plaintext_file_if_present(path)?;
     Ok(())
+}
+
+fn has_unencrypted_sqlite_header(reader: &mut impl Read) -> std::io::Result<bool> {
+    let mut header = [0; SQLITE_HEADER.len()];
+    match reader.read_exact(&mut header) {
+        Ok(()) => Ok(&header == SQLITE_HEADER),
+        Err(error) if error.kind() == std::io::ErrorKind::UnexpectedEof => Ok(false),
+        Err(error) => Err(error),
+    }
+}
+
+fn plaintext_sidecar_paths(path: &Path) -> Vec<PathBuf> {
+    ["-wal", "-shm", "-journal"]
+        .into_iter()
+        .map(|suffix| {
+            let mut sidecar = path.as_os_str().to_os_string();
+            sidecar.push(suffix);
+            PathBuf::from(sidecar)
+        })
+        .collect()
+}
+
+fn remove_plaintext_file_if_present(path: &Path) -> Result<(), String> {
+    match std::fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!(
+            "failed to discard unencrypted usage database file {}: {error}",
+            path.display()
+        )),
+    }
 }
 
 fn validate_session(session: &NewUsageSession<'_>) -> Result<(), String> {
@@ -381,6 +423,7 @@ fn sql_timestamp(value: u64) -> Result<i64, String> {
 mod tests {
     use super::*;
     use crate::secure_storage::MemoryKeyStore;
+    use std::io::Cursor;
 
     fn store() -> (tempfile::TempDir, UsageHistoryStore) {
         let directory = tempfile::tempdir().unwrap();
@@ -442,6 +485,10 @@ mod tests {
             )
             .unwrap();
         drop(plain);
+        let sidecars = plaintext_sidecar_paths(&path);
+        for sidecar in &sidecars {
+            std::fs::write(sidecar, b"known-value in plaintext sidecar").unwrap();
+        }
 
         let store = UsageHistoryStore::with_storage_path_and_key_store(
             path.clone(),
@@ -449,10 +496,21 @@ mod tests {
         )
         .unwrap();
         assert!(store.setting("secret").unwrap().is_none());
+        assert!(sidecars.iter().all(|sidecar| !sidecar.exists()));
         let bytes = std::fs::read(path).unwrap();
         assert!(!bytes
             .windows(b"known-value".len())
             .any(|window| window == b"known-value"));
+    }
+
+    #[test]
+    fn plaintext_detection_reads_only_the_sqlite_header() {
+        let mut bytes = SQLITE_HEADER.to_vec();
+        bytes.extend(std::iter::repeat_n(42, 1_024));
+        let mut reader = Cursor::new(bytes);
+
+        assert!(has_unencrypted_sqlite_header(&mut reader).unwrap());
+        assert_eq!(reader.position(), SQLITE_HEADER.len() as u64);
     }
 
     #[test]
