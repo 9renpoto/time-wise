@@ -24,9 +24,9 @@ The focused application's identity and observation time at a particular moment. 
 
 ## 利用セッション / Usage session
 
-同じアプリが継続してフォーカスされていた期間。画面ロックとスリープはセッションを中断する。日付変更や瞬間的なフォーカス喪失を境界とする詳細規則は未決。
+同じアプリが継続してフォーカスされていた期間。画面ロックとスリープはセッションを中断する。日付変更や瞬間的なフォーカス喪失を境界とする詳細規則は未決。将来の複数端末同期では、個々の利用セッションを暗号化された同期元データとし、日別・週別・アプリ別の集計値は承認済み端末上で再生成する案を検討する。
 
-A continuous period during which the same application was focused. Screen lock and sleep interrupt a session. Detailed boundary rules for date changes and momentary focus loss remain open.
+A continuous period during which the same application was focused. Screen lock and sleep interrupt a session. Detailed boundary rules for date changes and momentary focus loss remain open. For future multi-device synchronization, Time Wise is considering individual usage sessions as encrypted source records, with authorized devices recomputing daily, weekly, and per-application aggregates.
 
 ## アイドル状態 / Idle state
 
@@ -60,9 +60,15 @@ The unit used to aggregate usage time, identified from stable information availa
 
 ## アプリ識別情報 / Application identity
 
-同じアプリの計測サンプルをまとめ、アプリ名やアイコンを表示するための最小限の情報。実行ファイルの識別子、表示名、アイコン取得用の参照などを想定する。ウィンドウタイトル、文書名、メール件名、閲覧 URL、Web サイト名は含めない。表示情報だけが不足している場合は後から補完できる。
+同じアプリの計測サンプルをまとめ、アプリ名やアイコンを表示するための最小限の情報。実行ファイルの識別子、表示名、アイコン取得用の参照などを想定する。ウィンドウタイトル、文書名、メール件名、閲覧 URL、Web サイト名は含めない。表示情報だけが不足している場合は後から補完できる。初期の複数端末同期では OS 固有の識別子を維持し、異なる OS 上の同じ製品を推測で統合しない。
 
-The minimum information needed to group samples from the same application and display its name and icon. It may include an executable identifier, display name, and an icon reference. It excludes window titles, document names, email subjects, browsing URLs, and website names. Missing display metadata may be added later.
+The minimum information needed to group samples from the same application and display its name and icon. It may include an executable identifier, display name, and an icon reference. It excludes window titles, document names, email subjects, browsing URLs, and website names. Missing display metadata may be added later. Initial multi-device synchronization preserves platform-specific identities and does not speculatively merge the same product across operating systems.
+
+## 同期用アプリ識別子 / Synchronization application identifier
+
+同期された利用セッションから同じアプリの記録をまとめるための不透明な安定識別子。実行ファイルパスやアイコン取得元などの端末固有情報を値に含めない。端末内のアプリ識別情報との対応は同期元端末が管理する。
+
+An opaque stable identifier used to group records for the same application in synchronized usage sessions. Its value does not contain device-specific information such as executable paths or icon sources. The source device manages its association with the on-device application identity.
 
 ## 未分類 / Unclassified
 
@@ -94,11 +100,77 @@ OS のユーザーアカウントごとの端末内領域に保存された利�
 
 Usage history stored on the device for an individual operating-system user account. v1 does not send it to a server, delete it automatically, or share it with other accounts, and retains it indefinitely. Server synchronization will require separate retention rules.
 
+## エンドツーエンド暗号化 / End-to-end encryption
+
+利用データを送信元の承認済み端末で暗号化し、受信先の承認済み端末でだけ復号する保護方式。同期サーバーは暗号文を保存・配信するが、利用データの平文または復号可能な鍵を保持しない。アカウント、端末、通信時刻、データ量などのメタデータまで隠すことは意味しない。初期版は暗号文のパディングやダミー通信を行わない。
+
+A protection model in which an authorized source device encrypts usage data and only authorized destination devices decrypt it. The synchronization server stores and distributes ciphertext but does not possess usage-data plaintext or a key capable of decrypting it. It does not imply that metadata such as the account, device, transfer time, or data size is hidden. The initial implementation does not pad ciphertext or generate dummy traffic.
+
+## 暗号化ローカルDB / Encrypted local database
+
+端末内の利用履歴を検索・集計可能なリレーショナル形式で保持しながら、保存ファイル全体をローカルDB用鍵で暗号化したSQLiteデータベース。同期用暗号文とは別の保存表現であり、DBファイルやその鍵をサーバーへ送信しない。
+
+An on-device SQLite database whose entire storage file is encrypted with a local database key while preserving a relational form suitable for search and aggregation. It is distinct from synchronization ciphertext; neither the database file nor its key is sent to the server.
+
+## E2EE同期レコード / E2EE synchronization record
+
+一つの利用セッションと同期に必要な最小限のアプリ情報から生成し、同期用データ鍵で暗号化する不変の追記専用レコード。送信元端末が推測困難な一意IDを付与し、サーバーはそのIDで再送を冪等に処理する。端末内のSQLiteデータベース自体は同期しない。
+
+An immutable, append-only encrypted record generated from one usage session and the minimum application information required for synchronization. The source device assigns an unpredictable unique identifier that the server uses to process retries idempotently. The on-device SQLite database itself is not synchronized.
+
+## サーバー可視メタデータ / Server-visible metadata
+
+同期サーバーが復号せずに保存または観測できる情報。同期レコードではアカウントへの所属、無作為なレコードID、履歴世代、同期鍵世代、同期順序および暗号文サイズに限定する。利用日時、アプリおよび送信元端末は含めない。ただし、認証された通信元、アップロード時刻および通信量は運用時に観測できる。
+
+Information that the synchronization server can store or observe without decryption. For synchronization records it is limited to account membership, a random record identifier, history generation, synchronization key generation, synchronization order, and ciphertext size. It excludes usage time, application, and source device, although the server can observe authenticated connections, upload time, and traffic volume during operation.
+
+## 承認済み端末 / Authorized device
+
+利用者の暗号化データを復号するための鍵情報を正当に取得した端末。新しい端末は既存の承認済み端末による明示的な承認を受ける必要があり、アカウントへのログインだけでは承認済み端末にならない。削除、失効および鍵共有の具体的な方式は未決。
+
+A device that has legitimately obtained the key material required to decrypt a user's encrypted data. A new device requires explicit approval from an existing authorized device; signing in to the account alone does not authorize it. The mechanisms for removal, revocation, and key sharing remain undecided.
+
+## 端末鍵 / Device key
+
+承認済み端末を暗号学的に識別し、その端末がローカルDB用鍵と同期用データ鍵を利用できるようにする端末固有の鍵情報。OSの資格情報保護機構へ他端末に同期されない形で保存し、OSユーザーへのログイン後にTime Wiseが自動解錠する。
+
+Device-specific key material that cryptographically identifies an authorized device and enables it to use the local database key and synchronization data key. It is stored in the operating system's credential protection facility without cross-device synchronization and is unlocked automatically by Time Wise after operating-system user login.
+
+## 同期鍵世代 / Synchronization key generation
+
+同期用データ鍵のローテーション境界を表す値。承認済み端末を削除すると新しい世代へ進み、以後の同期レコードは残る承認済み端末だけが取得できる新しい鍵で暗号化する。過去レコードは再暗号化せず、残る承認済み端末が旧鍵を保持する。
+
+A value identifying a rotation boundary for the synchronization data key. Removing an authorized device advances the generation, and subsequent synchronization records are encrypted with a new key available only to the remaining authorized devices. Historical records are not re-encrypted; remaining authorized devices retain the old keys.
+
+## 端末別表示 / Per-device view
+
+同期済み履歴のうち、選択した一台の端末で計測した利用セッションだけを表示・集計する表示範囲。他端末との同時利用による重複排除は行わない。
+
+A view that displays and aggregates only synchronized usage sessions measured by one selected device. It does not deduplicate time that overlaps with usage on another device.
+
+## 全端末表示 / All-device view
+
+すべての承認済み端末で計測した同期済み履歴を表示・集計する表示範囲。総利用時間では、複数端末の利用セッションが重なる時間区間を一度だけ数える。アプリ別時間は各端末の観測をすべて計上するため、その合計が総利用時間を超える場合がある。
+
+A view that displays and aggregates synchronized history measured by every authorized device. Its total usage counts intervals that overlap across devices only once. Per-application usage includes every device's observations, so its sum may exceed total usage time.
+
+## 復旧不能 / Unrecoverable
+
+復号に必要な認証情報と鍵を保持する承認済み端末をすべて失ったため、暗号化された利用データを誰も復号できない状態。Time Wise の運営者は復旧用のマスターキーを保持せず、データ復旧を提供しない。
+
+A state in which nobody can decrypt the encrypted usage data because the credentials required for decryption and every authorized device holding key material have been lost. The Time Wise operator holds no recovery master key and cannot provide data recovery.
+
 ## 全履歴削除 / Delete all history
 
-端末内のすべての利用履歴を削除する操作。v1 では実行前に確認を求め、削除後の復元、期間指定、アプリ単位の削除は提供しない。
+すべての利用履歴を削除する操作。v1 では端末内だけを対象とする。将来、同期を有効にした場合はアカウント全体へ適用し、サーバーとすべての承認済み端末にある同期対象の履歴を削除する。オフライン端末上のコピーは、その端末が次に同期した時点で削除する。実行前に確認を求め、削除後の復元、期間指定、アプリ単位の削除は提供しない。
 
-An operation that deletes all usage history from the device. v1 requires confirmation and does not provide recovery, date-range deletion, or application-specific deletion.
+An operation that deletes all usage history. In v1 it applies only to the device. After synchronization is introduced, it becomes account-wide and removes synchronized history from the server and every authorized device. A copy on an offline device is deleted when that device next synchronizes. The operation requires confirmation and does not provide recovery, date-range deletion, or application-specific deletion.
+
+## 履歴世代 / History generation
+
+全履歴削除の境界を表す単調に進む値。サーバーは現在より古い履歴世代の同期レコードを拒否し、オフライン端末が削除済み履歴を再送信して復活させることを防ぐ。
+
+A monotonically advancing value that marks a Delete all history boundary. The server rejects synchronization records from older generations so an offline device cannot upload and restore deleted history.
 
 ## 計測日 / Measurement date
 
