@@ -1,6 +1,7 @@
 mod app_identity;
 mod app_usage;
 mod platform;
+pub mod secure_storage;
 mod startup_metrics;
 pub mod usage_history;
 mod usage_queries;
