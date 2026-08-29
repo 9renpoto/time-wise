@@ -24,6 +24,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Check application version consistency
         run: node .github/scripts/set-version.mjs --check
@@ -66,6 +67,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install system dependencies
         run: |
@@ -90,6 +93,11 @@ jobs:
         with:
           version: 'latest'
 
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@37f7c5781271959fb65b6b35224e28652ff2b63d # v2.87.0
+        with:
+          tool: nextest
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 
@@ -103,7 +111,14 @@ jobs:
         env:
           RUSTFLAGS: "-C instrument-coverage"
           LLVM_PROFILE_FILE: "cargo-test-%p.profraw"
-        run: cargo test --workspace
+        run: cargo nextest run --workspace --profile ci
+
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          report-type: test_results
 
       - name: Build portable frontend
         run: trunk build
@@ -126,6 +141,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install Rust toolchain
         # The channel, components, and targets come from rust-toolchain.toml.
