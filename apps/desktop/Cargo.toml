@@ -1,0 +1,15 @@
+[package]
+name = "time-wise-ui"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+base64 = "0.23"
+console_error_panic_hook = "0.1.7"
+js-sys = "0.3"
+leptos = { version = "0.8", features = ["csr"] }
+serde = { version = "1", features = ["derive"] }
+serde-wasm-bindgen = "0.6"
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = ["Window", "console"] }

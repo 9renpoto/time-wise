@@ -1,17 +1,17 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- `src/`: Leptos client UI. `main.rs` chooses the dashboard or settings window (`/?view=settings`). Components live in `presentation/`, domain types in `domain/`, and shared services in `application/` and `infrastructure/`; keep these layers aligned with Clean Architecture principles.
-- `src-tauri/`: Desktop backend. `src/lib.rs` manages the tray, startup metrics persistence, and settings window spawning. `src/startup_metrics.rs` stores launch timings in SQLite; `src/main.rs` wires the builder.
-- `public/`: Static assets served by Trunk. Build artifacts in `dist/` and `target/` remain untracked. CI, release, and hooks live under `.github/`.
+- `apps/desktop/`: Conventional Tauri application root. The Leptos client lives in `src/`, while the native shell, tray, and persistence live in `src-tauri/`. Static assets are in `public/`.
+- `apps/server/`: Reserved server package. Keep framework and transport choices out until the server implementation is designed.
+- Build artifacts in `apps/desktop/dist/` and `target/` remain untracked. CI, release, and hooks live under `.github/`.
 
 ## Build, Test, and Development Commands
 - `rust-toolchain.toml` pins the channel, components, and the `wasm32-unknown-unknown` target. Rustup resolves it automatically, so do not rely on a local `rustup default`; CI and releases read the same file.
-- `cargo tauri dev` – Launch the desktop shell with live-reloaded UI at `http://localhost:1420`.
-- `trunk serve` / `trunk build` – Develop or bundle the Web UI without the shell.
+- `cd apps/desktop && cargo tauri dev` – Launch the conventional `src-tauri` desktop shell with live-reloaded UI at `http://localhost:1420`.
+- `cd apps/desktop && trunk serve` / `trunk build` – Develop or bundle the Web UI without the shell.
 - `cargo check` • `cargo fmt --all` • `cargo clippy --workspace -- -D warnings` – Full-workspace validation commands; use them after shared manifest or cross-package changes.
 - `cargo test --workspace` – Execute all unit tests, including presentation helpers and backend utilities.
-- `cargo tauri build` – Produce distributable binaries (runs `trunk build` first).
+- `cd apps/desktop && cargo tauri build` – Produce distributable binaries (runs the web build first).
 - `cargo doc --workspace --no-deps` – Refresh Rustdoc; public comments must be English.
 
 ## Coding Style & Naming Conventions
@@ -31,4 +31,4 @@
 
 ## Security & Configuration Tips
 - Never commit secrets; install prek with `cargo install --locked prek`, then install the hooks with `prek install --overwrite` and `prek install --overwrite --hook-type pre-push`. Prek runs fail-first checks and selects Rust verification from the files changed before pushes.
-- Linux contributors must install WebKitGTK and libappindicator (see `README.md`) before running `cargo tauri dev` to match CI requirements.
+- Linux contributors must install WebKitGTK and libappindicator (see `README.md`) before running `cargo tauri dev` from `apps/desktop` to match CI requirements.

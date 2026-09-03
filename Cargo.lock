@@ -4823,6 +4823,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "time-wise-server"
+version = "0.1.0"
+
+[[package]]
 name = "time-wise-ui"
 version = "0.1.0"
 dependencies = [

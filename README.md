@@ -31,7 +31,7 @@ Once the prerequisites are installed, you can clone the repository and install t
 git clone <repository-url>
 # You need to replace <repository-name> with the actual name
 cd <repository-name>
-cargo build
+cargo build --workspace
 ```
 
 ## Usage
@@ -39,12 +39,14 @@ cargo build
 To run the application in development mode:
 
 ```bash
+cd apps/desktop
 cargo tauri dev
 ```
 
 To build the application for production:
 
 ```bash
+cd apps/desktop
 cargo tauri build
 ```
 

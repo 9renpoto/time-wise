@@ -1,0 +1,8 @@
+[package]
+name = "time-wise-server"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[lib]
+path = "src/lib.rs"
