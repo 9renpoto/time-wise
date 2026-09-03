@@ -7,6 +7,11 @@ fn application_versions_are_consistent() {
         fs::read_to_string(format!("{manifest_dir}/Cargo.toml")).expect("read backend Cargo.toml");
     let backend: toml::Value = toml::from_str(&backend_manifest).expect("parse backend Cargo.toml");
 
+    let workspace_manifest = fs::read_to_string(format!("{manifest_dir}/../../../Cargo.toml"))
+        .expect("read workspace Cargo.toml");
+    let workspace: toml::Value =
+        toml::from_str(&workspace_manifest).expect("parse workspace Cargo.toml");
+
     let ui_manifest =
         fs::read_to_string(format!("{manifest_dir}/../Cargo.toml")).expect("read UI Cargo.toml");
     let ui: toml::Value = toml::from_str(&ui_manifest).expect("parse UI Cargo.toml");
@@ -16,18 +21,23 @@ fn application_versions_are_consistent() {
     let tauri: serde_json::Value =
         serde_json::from_str(&tauri_config).expect("parse tauri.conf.json");
 
-    let backend_version = backend["package"]["version"]
+    let workspace_version = workspace["workspace"]["package"]["version"]
         .as_str()
-        .expect("backend package version");
+        .expect("workspace package version");
     assert_eq!(
-        ui["package"]["version"].as_str(),
-        Some(backend_version),
-        "UI and backend package versions must match"
+        backend["package"]["version"]["workspace"].as_bool(),
+        Some(true),
+        "desktop must inherit its version from the workspace"
+    );
+    assert_eq!(
+        ui["package"]["version"]["workspace"].as_bool(),
+        Some(true),
+        "UI must inherit its version from the workspace"
     );
     assert_eq!(
         tauri["version"].as_str(),
-        Some(backend_version),
-        "Tauri and backend package versions must match"
+        Some(workspace_version),
+        "Tauri and workspace package versions must match"
     );
 }
 
@@ -45,6 +55,7 @@ fn tauri_window_defaults_and_build_commands() {
     // build commands
     assert_eq!(v["build"]["beforeDevCommand"], "trunk serve --no-color");
     assert_eq!(v["build"]["beforeBuildCommand"], "trunk build --no-color");
+    assert_eq!(v["build"]["frontendDist"], "../dist");
     assert_eq!(v["build"]["devUrl"], "http://localhost:1420");
 
     // window defaults
@@ -62,7 +73,6 @@ fn tauri_window_defaults_and_build_commands() {
 #[test]
 fn trunk_config_serving_and_bindgen_version() {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    // Trunk.toml はワークスペースルート上
     let trunk_path = format!("{}/../Trunk.toml", manifest_dir);
     let data = fs::read_to_string(trunk_path).expect("read Trunk.toml");
     let v: toml::Value = toml::from_str(&data).expect("parse toml");

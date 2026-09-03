@@ -3,11 +3,13 @@
 import { readFileSync, writeFileSync } from "node:fs";
 
 const VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
-const PACKAGE_MANIFESTS = [
-  { path: "Cargo.toml", name: "time-wise-ui" },
-  { path: "src-tauri/Cargo.toml", name: "time-wise" },
+const WORKSPACE_MANIFEST = "Cargo.toml";
+const PACKAGE_NAMES = [
+  "time-wise",
+  "time-wise-server",
+  "time-wise-ui",
 ];
-const TAURI_CONFIG = "src-tauri/tauri.conf.json";
+const TAURI_CONFIG = "apps/desktop/src-tauri/tauri.conf.json";
 const CARGO_LOCK = "Cargo.lock";
 
 function readRequiredFile(path) {
@@ -21,11 +23,11 @@ function readRequiredFile(path) {
   }
 }
 
-function packageVersion(content, path) {
+function workspaceVersion(content, path) {
   const lines = content.split(/\r?\n/);
-  const packageStart = lines.indexOf("[package]");
+  const packageStart = lines.indexOf("[workspace.package]");
   if (packageStart === -1) {
-    throw new Error(`${path}: missing [package] section`);
+    throw new Error(`${path}: missing [workspace.package] section`);
   }
 
   const packageEnd = lines.findIndex(
@@ -77,16 +79,18 @@ function lockedPackageVersion(content, packageName) {
 }
 
 function readVersions() {
-  const versions = PACKAGE_MANIFESTS.map(({ path, name }) => ({
-    source: path,
-    value: packageVersion(readRequiredFile(path), path).version,
-    name,
-  }));
+  const versions = [{
+    source: WORKSPACE_MANIFEST,
+    value: workspaceVersion(
+      readRequiredFile(WORKSPACE_MANIFEST),
+      WORKSPACE_MANIFEST,
+    ).version,
+  }];
   const tauriConfig = JSON.parse(readRequiredFile(TAURI_CONFIG));
   versions.push({ source: TAURI_CONFIG, value: tauriConfig.version });
 
   const lock = readRequiredFile(CARGO_LOCK);
-  for (const { name } of PACKAGE_MANIFESTS) {
+  for (const name of PACKAGE_NAMES) {
     versions.push({
       source: `${CARGO_LOCK}:${name}`,
       value: lockedPackageVersion(lock, name).version,
@@ -111,10 +115,11 @@ function updateVersions(version) {
     throw new Error(`invalid semantic version: ${version}`);
   }
 
-  for (const { path } of PACKAGE_MANIFESTS) {
-    const content = readRequiredFile(path);
-    writeFileSync(path, packageVersion(content, path).replace(version));
-  }
+  const workspaceContent = readRequiredFile(WORKSPACE_MANIFEST);
+  writeFileSync(
+    WORKSPACE_MANIFEST,
+    workspaceVersion(workspaceContent, WORKSPACE_MANIFEST).replace(version),
+  );
 
   const configContent = readRequiredFile(TAURI_CONFIG);
   const config = JSON.parse(configContent);
@@ -122,7 +127,7 @@ function updateVersions(version) {
   writeFileSync(TAURI_CONFIG, `${JSON.stringify(config, null, 2)}\n`);
 
   let lockContent = readRequiredFile(CARGO_LOCK);
-  for (const { name } of PACKAGE_MANIFESTS) {
+  for (const name of PACKAGE_NAMES) {
     lockContent = lockedPackageVersion(lockContent, name).replace(version);
   }
   writeFileSync(CARGO_LOCK, lockContent);

@@ -8,8 +8,9 @@
     - Tauri v2 と Leptos を採用したクロスプラットフォームデスクトップアプリケーションを実装している。
     - Rust (2021 Edition) をバックエンド・フロントエンド双方の言語として使用している。
 - **アプリケーション構造**
-    - クリーンアーキテクチャに基づいたディレクトリ構成が整備されている (`src`, `src-tauri`)。
-    - UI (`src/presentation`)、ドメイン (`src/domain`)、アプリケーションサービス (`src/application`)、インフラ (`src/infrastructure`) のレイヤー分離。
+    - Cargo workspace の実行アプリを `apps` 配下に整理している。
+    - `apps/desktop` 内で Leptos UI (`src`) とTauriデスクトップシェル (`src-tauri`) の標準構造を維持している。
+    - 将来のサーバー実装用に `apps/server` をworkspaceへ用意している。
 - **主要機能**
     - 起動時間の計測に加え、前面でフォーカスされているアプリの利用時間を記録し、SQLite に永続化する機能が実装済み。
     - 今日・日別・週別の利用時間、アプリ別ランキング、時間帯別グラフを表示するダッシュボードが実装済み。
@@ -17,7 +18,7 @@
     - Windows と macOS で製品名を解決し、macOS では代表アイコンの取得・履歴への補完も実装済み。
     - v1 の正式対応・配布対象は Windows と macOS。Linux は正式対応対象外とし、将来アダプターを追加できる境界のみを維持する。
 - **開発環境・CI/CD**
-    - `cargo tauri dev` によるライブリロード開発環境。
+    - `apps/desktop` からの `cargo tauri dev` によるライブリロード開発環境。
     - `cargo fmt`, `cargo clippy`, `cargo test` などの静的解析・テストコマンドが整備済み。
     - GitHub Actions を利用した CI パイプラインが構築されており、Ubuntu、Windows、macOS でコードフォーマット、ビルド、テストが自動実行される。
     - `prek` による pre-commit / pre-push フックが設定済み。

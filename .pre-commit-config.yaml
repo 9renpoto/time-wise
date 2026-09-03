@@ -57,7 +57,15 @@ repos:
         name: clippy-ui
         entry: cargo clippy -p time-wise-ui --bins --tests --examples -- -D rust_2018_idioms -D warnings
         language: system
-        files: ^src/.*\.rs$
+        files: ^apps/desktop/src/.*\.rs$
+        pass_filenames: false
+        stages: [pre-push]
+
+      - id: clippy-server
+        name: clippy-server
+        entry: cargo clippy -p time-wise-server --all-targets -- -D rust_2018_idioms -D warnings
+        language: system
+        files: ^apps/server/
         pass_filenames: false
         stages: [pre-push]
 
@@ -65,7 +73,7 @@ repos:
         name: clippy-tauri
         entry: cargo clippy -p time-wise --bins --tests --examples -- -D rust_2018_idioms -D warnings
         language: system
-        files: ^src-tauri/
+        files: ^apps/desktop/src-tauri/
         pass_filenames: false
         stages: [pre-push]
 
@@ -81,7 +89,15 @@ repos:
         name: test-ui
         entry: cargo test -p time-wise-ui
         language: system
-        files: ^src/.*\.rs$
+        files: ^apps/desktop/src/.*\.rs$
+        pass_filenames: false
+        stages: [pre-push]
+
+      - id: test-server
+        name: test-server
+        entry: cargo test -p time-wise-server
+        language: system
+        files: ^apps/server/
         pass_filenames: false
         stages: [pre-push]
 
@@ -89,6 +105,6 @@ repos:
         name: test-tauri
         entry: cargo test -p time-wise
         language: system
-        files: ^src-tauri/
+        files: ^apps/desktop/src-tauri/
         pass_filenames: false
         stages: [pre-push]
