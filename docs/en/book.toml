@@ -1,0 +1,12 @@
+[book]
+authors = ["Time Wise contributors"]
+language = "en"
+src = "../src/en"
+title = "Time Wise Documentation"
+
+[build]
+build-dir = "../book/en"
+
+[output.html]
+git-repository-url = "https://github.com/9renpoto/time-wise"
+site-url = "/time-wise/en/"
