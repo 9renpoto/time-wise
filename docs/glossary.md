@@ -124,6 +124,34 @@ An immutable, append-only encrypted record generated from one usage session and 
 
 Information that the synchronization server can store or observe without decryption. For synchronization records it is limited to account membership, a random record identifier, history generation, synchronization key generation, synchronization order, and ciphertext size. It excludes usage time, application, and source device, although the server can observe authenticated connections, upload time, and traffic volume during operation.
 
+## アカウント / Account
+
+同期サービス上で認証情報と利用者の同期データの所属をまとめる単位。端末のOSユーザーアカウントとは別物。ADR 0003では、招待やメールアドレス、電話番号、実名を必要とせず、パスキーだけで登録できる方針とする。識別子はサービス側で自動生成し、ユーザー名の入力を求めない。生成形式と内部ID・表示用識別子の分離は未決。
+
+The synchronization-service entity that groups authentication credentials and ownership of synchronized data. It is distinct from an operating-system user account. ADR 0003 targets passkey-only registration without invitations, email addresses, phone numbers, or real names. The service automatically generates identifiers without requesting a username. Their format and separation of internal IDs from display identifiers remain undecided.
+
+## パスキー / Passkey
+
+アカウントへの認証に使う公開鍵資格情報。サーバーは検証に必要な公開鍵などを保持し、認証用の秘密鍵は受け取らない。Time Wiseでは履歴の復号鍵や端末承認と区別する。初期版から一つのアカウントに複数登録できる方針とし、追加にはそのアカウントの既存パスキーでの再認証を必須とする。すべてのパスキーを利用できなくなった場合、Time Wiseはアカウント復旧を提供せず、ログイン済みセッションだけでの追加も許可しない。登録数の上限は未決。
+
+A public-key credential used to authenticate to an account. The server retains verification information such as the public key, not the authentication private key. Time Wise distinguishes it from history-decryption keys and device authorization. The initial version is planned to support multiple passkeys per account; additions require reauthentication with an existing passkey for that account. If all passkeys become unavailable, Time Wise offers neither account recovery nor addition based solely on an authenticated session. Registration limits remain undecided.
+
+パスキーの登録解除にも同じアカウントの登録済みパスキーでの再認証を必須とし、最後の1件は登録解除できない。登録解除したパスキーでログインしたセッションも失効させる。アカウント削除と同期端末の承認取消は別操作とする。
+
+Removing a passkey registration also requires reauthentication with a registered passkey for the same account; the final registration cannot be removed. Sessions established by logging in with the removed passkey are also revoked. Account deletion and synchronization-device revocation are separate operations.
+
+## ログイン / Login
+
+アカウントに対する認証を成功させ、サービスを利用する認証済み状態を得る操作。ログイン成功だけでは新しい端末に履歴を復号する権限を与えない。ブラウザーとデスクトップのセッション方式や有効期限は未決。
+
+Successful account authentication that establishes an authenticated state for using the service. Login alone does not authorize a new device to decrypt history. Browser and desktop session mechanisms and expiry remain undecided.
+
+## 端末承認 / Device enrollment
+
+履歴を復号できる端末を追加する操作。ADR 0002の案では、既存の承認済み端末による明示的な確認と、保護された鍵共有を必要とする。アカウントへのパスキー追加とは別の操作であり、最初の端末の初期化手順は未決。
+
+The operation that adds a device capable of decrypting history. The ADR 0002 proposal requires explicit confirmation by an existing authorized device and protected key sharing. It is separate from adding a passkey to an account; first-device bootstrap remains undecided.
+
 ## 承認済み端末 / Authorized device
 
 利用者の暗号化データを復号するための鍵情報を正当に取得した端末。新しい端末は既存の承認済み端末による明示的な承認を受ける必要があり、アカウントへのログインだけでは承認済み端末にならない。削除、失効および鍵共有の具体的な方式は未決。
