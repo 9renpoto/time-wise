@@ -26,15 +26,16 @@ use usage_history::UsageHistoryStore;
 use usage_queries::{fetch_daily_usage_summary, fetch_weekly_usage_summary};
 use usage_recorder::{MeasurementHealth, UsageRecorder, CHECKPOINT_INTERVAL_SECONDS};
 
-#[cfg(not(target_os = "macos"))]
-use tauri::{PhysicalPosition, Position};
-
 use sysinfo::{get_current_pid, ProcessRefreshKind, ProcessesToUpdate, RefreshKind, System};
 #[cfg(not(target_os = "linux"))]
 use tauri::tray::TrayIconEvent;
+#[cfg(target_os = "linux")]
+use tauri::{PhysicalPosition, Position as TauriPosition};
 use tauri_plugin_autostart::AutoLaunchManager;
 #[cfg(target_os = "macos")]
 use tauri_plugin_autostart::MacosLauncher;
+#[cfg(not(target_os = "linux"))]
+use tauri_plugin_positioner::{Position, WindowExt};
 
 trait WindowLike {
     fn hide_window(&self);
@@ -91,13 +92,15 @@ pub fn toggled_visible(current: bool) -> bool {
 fn show_usage_window(window: &WebviewWindow, usage_state: &UsageWindowState) {
     usage_state.visible.store(true, Ordering::SeqCst);
 
+    // Linux tray implementations do not reliably emit click coordinates, so
+    // retain the existing top-right fallback for menu-triggered display.
     #[cfg(target_os = "linux")]
     {
         if let (Ok(size), Ok(Some(monitor))) = (window.outer_size(), window.current_monitor()) {
             let monitor_size = monitor.size();
             let x = monitor_size.width as i32 - size.width as i32 - 24;
             let y = 32;
-            let _ = window.set_position(Position::Physical(PhysicalPosition { x, y }));
+            let _ = window.set_position(TauriPosition::Physical(PhysicalPosition { x, y }));
         }
     }
 
@@ -410,6 +413,8 @@ pub fn run() {
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
+                    tauri_plugin_positioner::on_tray_event(tray.app_handle(), &event);
+
                     #[cfg(target_os = "linux")]
                     {
                         let _ = (tray, event);
@@ -419,8 +424,6 @@ pub fn run() {
                     {
                         if let TrayIconEvent::Click {
                             button: tauri::tray::MouseButton::Left,
-                            position,
-                            rect,
                             ..
                         } = event
                         {
@@ -428,37 +431,10 @@ pub fn run() {
                             let usage_state = app.state::<UsageWindowState>();
                             if let Some(window) = app.get_webview_window("main") {
                                 if toggled_visible(usage_state.visible.load(Ordering::SeqCst)) {
-                                    #[cfg(target_os = "macos")]
-                                    {
-                                        let _ = (position, rect);
-                                    }
-                                    #[cfg(not(target_os = "macos"))]
-                                    {
-                                        if let Ok(size) = window.outer_size() {
-                                            let monitor_height = window
-                                                .current_monitor()
-                                                .ok()
-                                                .flatten()
-                                                .map(|monitor| monitor.size().height as f64)
-                                                .unwrap_or(position.y * 2.0);
-                                            let x = position.x - (size.width as f64 / 2.0);
-                                            let tray_height = match rect.size {
-                                                tauri::Size::Physical(size) => size.height as f64,
-                                                tauri::Size::Logical(size) => size.height,
-                                            };
-                                            let y = if position.y > monitor_height / 2.0 {
-                                                position.y - size.height as f64 - 12.0
-                                            } else {
-                                                position.y + tray_height + 12.0
-                                            };
-                                            let _ = window.set_position(Position::Physical(
-                                                PhysicalPosition {
-                                                    x: x.round() as i32,
-                                                    y: y.round() as i32,
-                                                },
-                                            ));
-                                        }
-                                    }
+                                    let _ = window
+                                        .as_ref()
+                                        .window()
+                                        .move_window_constrained(Position::TrayCenter);
 
                                     show_usage_window(&window, &usage_state);
                                 } else {
