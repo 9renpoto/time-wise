@@ -63,14 +63,14 @@ This is a design record for developers, not a description of implemented feature
 - アカウントと認証は `apps/server` のRustサーバーが管理する方式を第一候補とする。外部認証サービスへの委譲は現時点では採用しないが、最終的な技術選定は未完了。
 - デスクトップからシステムブラウザーで認証画面を開き、認証後にアプリへ戻る方式を第一候補とする。OSネイティブAPIとTauri内WebViewも比較対象に残す。
 - ブラウザー方式は将来のWeb向け認証画面の再利用を検討しやすい一方、アプリへの安全な認証結果の受け渡しが必要。ネイティブ方式はOS別実装、WebView方式は対応環境とドメイン関連付けの検証が必要になる。
-- WebAuthnの検証と暗号処理は既存ライブラリを利用する案とし、具体的なライブラリ、Webフレームワーク、DB、セッション方式、OAuth/OIDC採用の有無は未選定。
+- WebAuthnの検証と暗号処理は既存ライブラリを利用する案とする。T01では `webauthn-rs` 0.5.5 をWorkers用Wasmで検証し、OpenSSL依存とWasm向け乱数設定の不足によりビルドできなかったため不採用とした。`passkey-auth` 0.1.3 はWasmビルドできたが、登録チャレンジ生成で `std::time::SystemTime` が未実装のため実行時にパニックして不採用とした。Workersで実行できる検証ライブラリ、Webフレームワーク、DB、セッション方式、OAuth/OIDC採用の有無は未選定。
 
 ### English
 
 - Prefer managing accounts and authentication in the Rust server under `apps/server`. Delegation to an external identity service is not the current choice, but technology selection is not final.
 - Prefer opening authentication in the system browser and returning to the desktop application. Keep native operating-system APIs and the Tauri WebView as alternatives to evaluate.
 - Browser authentication offers an opportunity to reuse authentication pages for a future web client, but requires a secure handoff to the desktop application. Native integration requires platform-specific work; WebView integration requires compatibility and domain-association validation.
-- Propose existing libraries for WebAuthn verification and cryptographic operations. Specific libraries, web framework, database, session mechanism, and whether to use OAuth/OIDC remain undecided.
+- Propose existing libraries for WebAuthn verification and cryptographic operations. T01 rejected `webauthn-rs` 0.5.5 because its OpenSSL dependency and Wasm randomness configuration prevented compilation. `passkey-auth` 0.1.3 compiled, but its registration challenge panicked at runtime because `std::time::SystemTime` is unavailable on `wasm32-unknown-unknown`; reject it too. A Workers-compatible verification library, web framework, database, session mechanism, and whether to use OAuth/OIDC remain undecided.
 
 ## 影響と未決事項 / Consequences and open questions
 
