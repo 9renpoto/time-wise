@@ -17,6 +17,7 @@
 ## Coding Style & Naming Conventions
 - Rust 2021, four-space indentation, ASCII unless legacy files require otherwise. Use `snake_case` for functions/modules, `PascalCase` for types/traits, and `SCREAMING_SNAKE_CASE` for constants.
 - CSS follows BEM (`app__startup-title`). Avoid inline styles except for dynamic values calculated in Leptos.
+- Write code comments and documentation comments in English.
 - Sort manifests with `cargo sort -w`, and rely on existing services in `application/` or `infrastructure/` before adding new helpers.
 
 ## Testing Guidelines
@@ -32,3 +33,17 @@
 ## Security & Configuration Tips
 - Never commit secrets; install prek with `cargo install --locked prek`, then install the hooks with `prek install --overwrite` and `prek install --overwrite --hook-type pre-push`. Prek runs fail-first checks and selects Rust verification from the files changed before pushes.
 - Linux contributors must install WebKitGTK and libappindicator (see `README.md`) before running `cargo tauri dev` from `apps/desktop` to match CI requirements.
+
+## Review & Documentation Language
+- Write reviews and project documentation bilingually in English and Japanese.
+- Use English as the primary, visible text. Put the Japanese translation in a collapsible `<details>` block so it remains available without dominating the document.
+- Keep code comments and documentation comments in English, including comments in review examples and configuration snippets.
+
+<details>
+<summary>日本語</summary>
+
+- レビューとプロジェクト文書は、英語と日本語の併記で作成します。
+- 英語を主表示にし、日本語訳は折りたたみ可能な `<details>` ブロックにまとめ、文書上で目立ちすぎないようにします。
+- コード例や設定例に含めるコメントを含め、コードコメントとドキュメントコメントは英語で記述します。
+
+</details>
