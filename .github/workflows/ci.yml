@@ -29,6 +29,9 @@ jobs:
       - name: Check application version consistency
         run: node .github/scripts/set-version.mjs --check
 
+      - name: Test release scripts
+        run: node --test .github/scripts/release.test.mjs
+
       - name: Detect relevant changes
         id: scope
         shell: bash
