@@ -10,8 +10,9 @@ Time Wise shows where your time goes without collecting window titles, document
 names, browsing URLs, or browser tabs. Usage history remains on the computer and
 can be deleted from the app.
 
-Windows packages are currently published through GitHub Releases. The macOS app
-is supported by the codebase, but its release pipeline is currently paused.
+Windows and macOS packages are built from version tags and published through
+GitHub Releases. macOS releases also generate a Homebrew cask for Intel and
+Apple Silicon Macs.
 Linux is not a supported product target.
 
 ## Table of Contents
@@ -35,7 +36,16 @@ computer is asleep, and stores history in an on-device SQLite database.
 
 ## Install
 
-Download the latest Windows installer from
+After the first stable release and tap setup, install on macOS with:
+
+```bash
+brew tap 9renpoto/tap
+brew install --cask 9renpoto/tap/time-wise
+```
+
+To update, run `brew update && brew upgrade --cask time-wise`.
+
+Download the latest Windows installer or macOS DMG from
 [GitHub Releases](https://github.com/9renpoto/time-wise/releases). See the
 [user guide](https://9renpoto.github.io/time-wise/) for installation and
 first-run instructions in Japanese and English.
@@ -107,6 +117,9 @@ cargo test --workspace
 Install the repository hooks with `prek install --overwrite` and
 `prek install --overwrite --hook-type pre-push`. Include screenshots or a GIF
 when changing the desktop UI.
+
+Release maintainers: see [the tag-based release guide](docs/releasing.md) for
+tap setup, version preparation, and publishing.
 
 ## License
 
