@@ -46,7 +46,7 @@ jobs:
 
           while IFS= read -r path; do
             case "$path" in
-              Cargo.toml|Cargo.lock|.github/workflows/ci.yml|.github/workflows/tauri-release.yml|apps/desktop/src-tauri/*)
+              Cargo.toml|Cargo.lock|.github/workflows/ci.yml|.github/workflows/tauri-release.yml|.octocov.yml|apps/desktop/src-tauri/*)
                 verify=true
                 windows=true
                 ;;
@@ -64,6 +64,10 @@ jobs:
     needs: changes
     if: needs.changes.outputs.verify == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -113,13 +117,6 @@ jobs:
           LLVM_PROFILE_FILE: "cargo-test-%p.profraw"
         run: cargo nextest run --workspace --profile ci
 
-      - name: Upload test results to Codecov
-        if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          report-type: test_results
-
       - name: Build portable frontend
         working-directory: apps/desktop
         run: trunk build
@@ -127,12 +124,8 @@ jobs:
       - name: Generate coverage report
         run: grcov . --binary-path ./target/debug/deps/ -s . -t lcov --branch --ignore-not-existing --ignore "target/*" --ignore ".cargo/*" -o lcov.info
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: lcov.info
-          fail_ci_if_error: true
+      - name: Report coverage with Octocov
+        uses: k1LoW/octocov-action@a167dc0dee441b7ffc45e1b862ab55ec0d87f278 # v1.5.2
 
   windows-platform:
     name: Windows platform

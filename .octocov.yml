@@ -1,0 +1,24 @@
+coverage:
+  paths:
+    - lcov.info
+  badge:
+    path: docs/coverage.svg
+
+comment:
+  if: is_pull_request
+  deletePrevious: true
+
+summary:
+  if: true
+
+report:
+  if: is_default_branch
+  datastores:
+    - artifact://${GITHUB_REPOSITORY}
+
+diff:
+  datastores:
+    - artifact://${GITHUB_REPOSITORY}
+
+push:
+  if: is_default_branch

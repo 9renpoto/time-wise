@@ -1,7 +1,7 @@
 # Time Wise
 
 [![CI](https://github.com/9renpoto/time-wise/actions/workflows/ci.yml/badge.svg)](https://github.com/9renpoto/time-wise/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/9renpoto/time-wise/graph/badge.svg?token=Fwk8L6cDp3)](https://codecov.io/gh/9renpoto/time-wise)
+[![coverage](https://raw.githubusercontent.com/9renpoto/time-wise/main/docs/coverage.svg)](https://octocov.dev/gh/9renpoto/time-wise)
 [![standard-readme compliant](https://img.shields.io/badge/readme%20style-standard-brightgreen.svg?style=flat-square)](https://github.com/RichardLitt/standard-readme)
 
 A desktop app that records focused-application time and keeps usage history on your device.

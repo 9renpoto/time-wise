@@ -22,7 +22,7 @@
 ## Testing Guidelines
 - Co-locate unit tests in the same file under `#[cfg(test)]`; integration tests belong in `tests/`.
 - Keep tests deterministic and lightweight—mock IO when possible.
-- Let prek and CI select package-level tests for isolated changes. Run `cargo test --workspace` for shared manifests, cross-package changes, and release validation; pushes to `main` refresh full-workspace coverage via grcov/Codecov.
+- Let prek and CI select package-level tests for isolated changes. Run `cargo test --workspace` for shared manifests, cross-package changes, and release validation; pushes to `main` refresh full-workspace coverage via grcov/Octocov.
 
 ## Commit & Pull Request Guidelines
 - Follow Conventional Commits (`feat:`, `fix:`, `chore:`). Example: `feat: add settings tray entry`.
