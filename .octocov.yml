@@ -11,6 +11,10 @@ comment:
 summary:
   if: true
 
+testExecutionTime:
+  steps:
+    - Run workspace tests with coverage
+
 report:
   if: is_default_branch
   datastores:
