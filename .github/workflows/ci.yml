@@ -120,7 +120,7 @@ jobs:
         run: trunk build
 
       - name: Generate coverage report
-        run: grcov . --binary-path ./target/debug/deps/ -s . -t lcov --branch --ignore-not-existing --ignore "target/*" --ignore ".cargo/*" -o lcov.info
+        run: grcov . --binary-path ./target/debug/deps/ -s . -t lcov --branch --ignore-not-existing --keep-only "apps/**" -o lcov.info
 
       - name: Upload workspace coverage
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
