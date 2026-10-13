@@ -7,7 +7,6 @@ on:
   push:
     branches: ["main"]
   pull_request:
-    branches: ["main"]
 
 env:
   CARGO_TERM_COLOR: always
@@ -67,10 +66,6 @@ jobs:
     needs: changes
     if: needs.changes.outputs.verify == 'true'
     runs-on: ubuntu-latest
-    permissions:
-      actions: write
-      contents: read
-      pull-requests: write
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -127,6 +122,32 @@ jobs:
       - name: Generate coverage report
         run: grcov . --binary-path ./target/debug/deps/ -s . -t lcov --branch --ignore-not-existing --ignore "target/*" --ignore ".cargo/*" -o lcov.info
 
+      - name: Upload workspace coverage
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: workspace-coverage
+          path: lcov.info
+          if-no-files-found: error
+
+  coverage:
+    name: Report coverage
+    needs: workspace
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download workspace coverage
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: workspace-coverage
+
       - name: Report coverage with Octocov
         uses: k1LoW/octocov-action@a167dc0dee441b7ffc45e1b862ab55ec0d87f278 # v1.5.2
 
@@ -140,7 +161,7 @@ jobs:
 
   publish-pages:
     name: Publish documentation and coverage badges
-    needs: workspace
+    needs: coverage
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     uses: $/.github/workflows/docs.yml
     permissions:
@@ -187,7 +208,7 @@ jobs:
   build-and-test:
     name: build-and-test
     if: always()
-    needs: [changes, workspace, windows-platform]
+    needs: [changes, workspace, coverage, windows-platform]
     runs-on: ubuntu-slim
 
     steps:
@@ -198,6 +219,7 @@ jobs:
           VERIFY: ${{ needs.changes.outputs.verify }}
           WINDOWS: ${{ needs.changes.outputs.windows }}
           WORKSPACE_RESULT: ${{ needs.workspace.result }}
+          COVERAGE_RESULT: ${{ needs.coverage.result }}
           WINDOWS_RESULT: ${{ needs.windows-platform.result }}
         run: |
           if [[ "$CHANGES_RESULT" != success ]]; then
@@ -212,6 +234,16 @@ jobs:
 
           if [[ "$VERIFY" != true && "$WORKSPACE_RESULT" != skipped ]]; then
             echo "Workspace verification should have been skipped: $WORKSPACE_RESULT"
+            exit 1
+          fi
+
+          if [[ "$VERIFY" == true && "$COVERAGE_RESULT" != success ]]; then
+            echo "Coverage reporting did not succeed: $COVERAGE_RESULT"
+            exit 1
+          fi
+
+          if [[ "$VERIFY" != true && "$COVERAGE_RESULT" != skipped ]]; then
+            echo "Coverage reporting should have been skipped: $COVERAGE_RESULT"
             exit 1
           fi
 
