@@ -16,6 +16,11 @@ on:
       - "docs/en/book.toml"
       - "docs/src/**"
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      badge-run-id:
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -27,6 +32,9 @@ concurrency:
 jobs:
   build:
     name: Build mdBook
+    permissions:
+      contents: read
+      actions: read
     runs-on: ubuntu-latest
 
     steps:
@@ -45,6 +53,25 @@ jobs:
           mdbook build docs
           mdbook build docs/en
 
+      - name: Include coverage badges
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BADGE_RUN_ID: ${{ inputs.badge-run-id }}
+        run: |
+          if [[ -z "$BADGE_RUN_ID" ]]; then
+            BADGE_RUN_ID=$(gh api --method GET \
+              "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=coverage-badges&per_page=100" \
+              --jq '[.artifacts[] | select(.expired == false and .workflow_run.head_branch == "main")] | first | .workflow_run.id // empty')
+          fi
+          if [[ -z "$BADGE_RUN_ID" ]]; then
+            echo "No coverage badges have been published on main yet."
+            exit 0
+          fi
+          gh run download "$BADGE_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name coverage-badges --dir "$RUNNER_TEMP/coverage-badges"
+          mkdir -p docs/book/badges
+          cp "$RUNNER_TEMP/coverage-badges/"*.svg docs/book/badges/
+
       - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
@@ -52,7 +79,7 @@ jobs:
 
   deploy:
     name: Deploy documentation
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     permissions:

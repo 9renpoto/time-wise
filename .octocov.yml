@@ -1,0 +1,20 @@
+coverage:
+  badge:
+    path: .octocov/badges/coverage.svg
+
+comment: {}
+summary: {}
+
+testExecutionTime:
+  steps:
+    - Run workspace tests with coverage
+  badge:
+    path: .octocov/badges/test-time.svg
+
+report:
+  datastores:
+    - artifact://${GITHUB_REPOSITORY}
+
+diff:
+  datastores:
+    - artifact://${GITHUB_REPOSITORY}

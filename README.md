@@ -1,7 +1,8 @@
 # Time Wise
 
 [![CI](https://github.com/9renpoto/time-wise/actions/workflows/ci.yml/badge.svg)](https://github.com/9renpoto/time-wise/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/9renpoto/time-wise/graph/badge.svg?token=Fwk8L6cDp3)](https://codecov.io/gh/9renpoto/time-wise)
+[![coverage](https://9renpoto.github.io/time-wise/badges/coverage.svg)](https://github.com/9renpoto/time-wise/actions/workflows/ci.yml)
+[![test execution time](https://9renpoto.github.io/time-wise/badges/test-time.svg)](https://github.com/9renpoto/time-wise/actions/workflows/ci.yml)
 [![standard-readme compliant](https://img.shields.io/badge/readme%20style-standard-brightgreen.svg?style=flat-square)](https://github.com/RichardLitt/standard-readme)
 
 A desktop app that records focused-application time and keeps usage history on your device.
@@ -97,7 +98,17 @@ mdbook build docs/en
 ```
 
 The generated `docs/book/` directory is not tracked on the source branch.
-Changes merged into `main` are built and published to the `gh-pages` branch.
+Documentation and Octocov badges are built from `main` and deployed together to
+GitHub Pages through Actions. The coverage and test-time badges use measured CI
+results; source files are not updated by the publisher.
+
+<details>
+<summary>日本語</summary>
+
+ドキュメントとOctocovのバッジは、`main` からビルドし、Actions経由でGitHub Pagesへまとめて公開します。
+カバレッジとテスト実行時間のバッジはCIの計測結果を使い、公開処理によるソースファイルの更新は行いません。
+
+</details>
 
 ## Contributing
 
