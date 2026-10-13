@@ -52,3 +52,5 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
           publish_dir: docs/book
+          # Preserve coverage badges published by CI in badges/.
+          keep_files: true
