@@ -1,6 +1,7 @@
 name: Bump version (cron)
 permissions:
   contents: write
+  pull-requests: write
 
 on:
   schedule:
@@ -9,6 +10,5 @@ on:
 jobs:
   scheduled_bump:
     uses: ./.github/workflows/bump.yml
-    secrets: inherit
     with:
       semver: minor

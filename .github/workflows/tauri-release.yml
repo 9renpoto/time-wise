@@ -4,94 +4,161 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag (vMAJOR.MINOR.PATCH)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
-  release-windows:
-    name: Release Windows installers
+  prepare:
+    runs-on: ubuntu-latest
     permissions:
       contents: write
-    runs-on: windows-latest
-
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      release_id: ${{ steps.release.outputs.release_id }}
+      prerelease: ${{ steps.release.outputs.prerelease }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.tag || github.ref_name }}
           persist-credentials: false
-
-      - name: Install Rust toolchain
-        # The channel, components, and targets come from rust-toolchain.toml.
-        run: rustup show active-toolchain
-
-      - name: Install trunk
-        uses: jetli/trunk-action@1346cc09eace4beb84e403e199a471346d4684c9 # v0.5.1
-        with:
-          version: 'latest'
-
-      - name: Build and release
-        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
+      - name: Validate tag and prepare draft release
+        id: release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          projectPath: apps/desktop
-          tagName: ${{ github.ref_name }}
-          releaseName: 'Release ${{ github.ref_name }}'
-          releaseBody: 'See the assets to download this version and install.'
-          releaseDraft: false
-          prerelease: false
-          args: '--bundles nsis,msi'
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          node .github/scripts/set-version.mjs --check-tag "$RELEASE_TAG"
+          prerelease=false
+          if [[ "$RELEASE_TAG" == *-* ]]; then prerelease=true; fi
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --draft --prerelease="$prerelease" --title "Time Wise $RELEASE_TAG" --generate-notes
+          fi
+          {
+            echo "tag=$RELEASE_TAG"
+            echo "prerelease=$prerelease"
+            echo "release_id=$(gh release view "$RELEASE_TAG" --json databaseId --jq .databaseId)"
+          } >> "$GITHUB_OUTPUT"
 
-  release-linux-and-macos:
-    name: Release ${{ matrix.platform }} (paused)
-    if: ${{ vars.ENABLE_NON_WINDOWS_RELEASES == 'true' }}
+  build:
+    needs: prepare
+    name: Build ${{ matrix.target }}
     permissions:
       contents: write
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: 'macos-latest'
-            args: '--target aarch64-apple-darwin'
-          - platform: 'macos-latest'
-            args: '--target x86_64-apple-darwin'
-          - platform: 'ubuntu-latest'
-            args: ''
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            args: --bundles nsis,msi
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            args: --target aarch64-apple-darwin --bundles dmg
+          - platform: macos-latest
+            target: x86_64-apple-darwin
+            args: --target x86_64-apple-darwin --bundles dmg
     runs-on: ${{ matrix.platform }}
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.prepare.outputs.tag }}
           persist-credentials: false
-
-      - name: Install Rust toolchain
-        # The channel and the shared wasm32 target come from rust-toolchain.toml
-        # so that CI, releases, and local builds resolve the same toolchain.
+      - name: Install pinned Rust toolchain
         run: rustup show active-toolchain
-
-      - name: Install Apple targets (macOS only)
-        if: matrix.platform == 'macos-latest'
-        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
-
+      - name: Install Apple target
+        if: runner.os == 'macOS'
+        env:
+          RUST_TARGET: ${{ matrix.target }}
+        run: rustup target add "$RUST_TARGET"
       - name: Install trunk
         uses: jetli/trunk-action@1346cc09eace4beb84e403e199a471346d4684c9 # v0.5.1
         with:
           version: 'latest'
-
-      - name: Install dependencies (ubuntu only)
-        if: matrix.platform == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
-
-      - name: Build and release
+      - name: Build and upload installers to draft
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: apps/desktop
-          tagName: ${{ github.ref_name }}
-          releaseName: 'Release ${{ github.ref_name }}'
-          releaseBody: 'See the assets to download this version and install.'
-          releaseDraft: false
-          prerelease: false
+          releaseId: ${{ needs.prepare.outputs.release_id }}
           args: ${{ matrix.args }}
+
+  publish:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+          persist-credentials: false
+      - name: Generate checksummed Homebrew cask and publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+        run: |
+          mkdir -p release-assets
+          gh release download "$RELEASE_TAG" --pattern '*.dmg' --dir release-assets
+          node .github/scripts/homebrew-cask.mjs "$RELEASE_TAG" release-assets > release-assets/time-wise.rb
+          gh release upload "$RELEASE_TAG" release-assets/time-wise.rb --clobber
+          gh release edit "$RELEASE_TAG" --draft=false --prerelease="$PRERELEASE" --latest="$([[ "$PRERELEASE" == false ]] && echo true || echo false)"
+
+  homebrew:
+    needs: [prepare, publish]
+    if: needs.prepare.outputs.prerelease == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+          persist-credentials: false
+      - name: Download published cask
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+        run: gh release download "$RELEASE_TAG" --pattern time-wise.rb
+      - name: Update Homebrew tap
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          HOMEBREW_TAP: ${{ vars.HOMEBREW_TAP || '9renpoto/homebrew-tap' }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        with:
+          github-token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          script: |
+            if (!process.env.TAP_TOKEN) {
+              throw new Error('Set HOMEBREW_TAP_TOKEN with Contents: write access to the Homebrew tap.');
+            }
+            const fs = require('node:fs');
+            const [owner, repo] = process.env.HOMEBREW_TAP.split('/');
+            const path = 'Casks/time-wise.rb';
+            let sha;
+            try {
+              const existing = await github.rest.repos.getContent({ owner, repo, path });
+              sha = existing.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner, repo, path, sha,
+              message: `chore: update time-wise to ${process.env.RELEASE_TAG}`,
+              content: fs.readFileSync('time-wise.rb').toString('base64'),
+            });

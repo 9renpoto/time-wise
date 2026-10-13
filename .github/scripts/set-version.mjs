@@ -2,13 +2,10 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 
-const VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+const VERSION_PATTERN =
+  /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 const WORKSPACE_MANIFEST = "Cargo.toml";
-const PACKAGE_NAMES = [
-  "time-wise",
-  "time-wise-server",
-  "time-wise-ui",
-];
+const PACKAGE_NAMES = ["time-wise", "time-wise-server", "time-wise-ui"];
 const TAURI_CONFIG = "apps/desktop/src-tauri/tauri.conf.json";
 const CARGO_LOCK = "Cargo.lock";
 
@@ -17,7 +14,9 @@ function readRequiredFile(path) {
     return readFileSync(path, "utf8");
   } catch (error) {
     if (error?.code === "ENOENT") {
-      throw new Error(`${path}: required version source is missing; ensure it is tracked`);
+      throw new Error(
+        `${path}: required version source is missing; ensure it is tracked`,
+      );
     }
     throw error;
   }
@@ -36,7 +35,9 @@ function workspaceVersion(content, path) {
   const end = packageEnd === -1 ? lines.length : packageEnd;
   const versionIndex = lines.findIndex(
     (line, index) =>
-      index > packageStart && index < end && /^version\s*=\s*"[^"]+"$/.test(line),
+      index > packageStart &&
+      index < end &&
+      /^version\s*=\s*"[^"]+"$/.test(line),
   );
   if (versionIndex === -1) {
     throw new Error(`${path}: missing package version`);
@@ -79,13 +80,15 @@ function lockedPackageVersion(content, packageName) {
 }
 
 function readVersions() {
-  const versions = [{
-    source: WORKSPACE_MANIFEST,
-    value: workspaceVersion(
-      readRequiredFile(WORKSPACE_MANIFEST),
-      WORKSPACE_MANIFEST,
-    ).version,
-  }];
+  const versions = [
+    {
+      source: WORKSPACE_MANIFEST,
+      value: workspaceVersion(
+        readRequiredFile(WORKSPACE_MANIFEST),
+        WORKSPACE_MANIFEST,
+      ).version,
+    },
+  ];
   const tauriConfig = JSON.parse(readRequiredFile(TAURI_CONFIG));
   versions.push({ source: TAURI_CONFIG, value: tauriConfig.version });
 
@@ -99,13 +102,28 @@ function readVersions() {
   return versions;
 }
 
-function checkVersions() {
+function checkVersions(tag) {
   const versions = readVersions();
   const expected = versions[0].value;
   const mismatches = versions.filter(({ value }) => value !== expected);
   if (mismatches.length > 0) {
-    const details = versions.map(({ source, value }) => `${source}=${value}`).join(", ");
+    const details = versions
+      .map(({ source, value }) => `${source}=${value}`)
+      .join(", ");
     throw new Error(`version mismatch: ${details}`);
+  }
+  if (tag !== undefined && tag !== `v${expected}`) {
+    throw new Error(
+      `tag ${tag} does not match application version v${expected}`,
+    );
+  }
+  if (
+    tag !== undefined &&
+    !/^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$/.test(
+      tag,
+    )
+  ) {
+    throw new Error(`invalid release tag: ${tag}`);
   }
   console.log(`All application versions are ${expected}.`);
 }
@@ -138,9 +156,14 @@ function updateVersions(version) {
 const argument = process.argv[2];
 if (argument === "--check") {
   checkVersions();
+} else if (argument === "--check-tag") {
+  if (!process.argv[3]) throw new Error("a release tag is required");
+  checkVersions(process.argv[3]);
 } else if (argument) {
   updateVersions(argument);
 } else {
-  console.error("Usage: set-version.mjs <semver> | --check");
+  console.error(
+    "Usage: set-version.mjs <semver> | --check | --check-tag <tag>",
+  );
   process.exitCode = 2;
 }

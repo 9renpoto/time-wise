@@ -2,6 +2,17 @@
 
 [English](en/install.html)
 
+## macOS: Homebrew を使う
+
+最初の安定版リリースと tap の設定が完了した後は、Intel / Apple Silicon の両方で次のコマンドを使えます。
+
+```bash
+brew tap 9renpoto/tap
+brew install --cask 9renpoto/tap/time-wise
+```
+
+更新は `brew update && brew upgrade --cask time-wise` で行います。
+
 ## 1. インストーラーを入手する
 
 [GitHub Releases](https://github.com/9renpoto/time-wise/releases) を開き、使用している OS 向けのファイルが公開されている場合は、最新リリースからダウンロードします。
