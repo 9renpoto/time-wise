@@ -142,7 +142,7 @@ jobs:
     name: Publish documentation and coverage badges
     needs: workspace
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    uses: ./.github/workflows/docs.yml
+    uses: $/.github/workflows/docs.yml
     permissions:
       contents: read
       actions: read
