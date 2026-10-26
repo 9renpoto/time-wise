@@ -10,7 +10,7 @@
 
 Time Wise は、既存のスクリーンタイムアプリを参考に、ユーザーがアプリを利用した時間を記録する。
 
-現在の実装は、一定間隔で起動中のプロセスを取得し、プロセスが存在していた時間を利用時間として扱っている。この方法では、バックグラウンドで動作しているアプリも利用中として記録されるため、ユーザーが実際に操作していた時間を表せない。
+プロセスが存在していた時間だけでは、バックグラウンドで動作している時間も利用時間に含まれるため、ユーザーが実際に操作していた時間を表せない。
 
 OS ごとに取得できる情報や必要な権限が異なるため、具体的な取得方法はプラットフォームごとに選択する必要がある。
 
@@ -18,7 +18,7 @@ OS ごとに取得できる情報や必要な権限が異なるため、具体�
 
 Time Wise records how long users spend in applications, taking existing screen-time applications as product references.
 
-The current implementation periodically enumerates running processes and treats process lifetime as usage time. This records background applications as active usage and therefore does not represent the applications the user was actually using.
+Process lifetime includes time spent running in the background and therefore does not represent the applications the user was actually using.
 
 Available information and required permissions vary by operating system, so each platform requires its own collection implementation.
 
@@ -94,7 +94,7 @@ Available information and required permissions vary by operating system, so each
 
 ### 日本語
 
-- 現在のプロセス一覧ベースの計測処理を置き換えるか、役割を限定する必要がある。
+- 利用時間の計測には OS のフォーカス変更イベントを使用し、起動中のプロセス一覧を定期収集しない。
 - OS 固有の取得処理をインフラストラクチャ層へ閉じ込め、ドメイン層とアプリケーション層から分離する必要がある。
 - 対応 OS ごとに、デスクトップアプリとパッケージアプリを安定した製品単位へ解決する識別処理が必要になる。
 - ブラウザ内の Web サイト別時間、同じ製品のプロファイル別・ウィンドウ別時間は確認できない。
@@ -112,7 +112,7 @@ Available information and required permissions vary by operating system, so each
 
 ### English
 
-- The current process-enumeration recorder must be replaced or given a narrower role.
+- Measure usage from operating-system foreground-change events without periodically collecting lists of running processes.
 - Operating-system-specific collection must remain in the infrastructure layer, separate from domain and application logic.
 - Each supported operating system requires resolution of desktop and packaged applications to stable product-level identities.
 - The product will not report usage by website, browser profile, or individual window.

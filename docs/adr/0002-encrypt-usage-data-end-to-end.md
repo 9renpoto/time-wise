@@ -67,14 +67,14 @@ References:
 - 承認済み端末ではOSユーザーへのログインをローカルの信頼境界とし、Time Wiseの起動時に端末鍵を自動解錠する。Time Wise専用パスフレーズの入力は要求しない。
 - 初期の新端末承認では、既存の承認済み端末と新端末が同時にオンラインであることを必須とする。両端末に同じ短い確認コードを表示し、利用者が一致を確認して既存端末から明示的に承認する。
 - サーバーは端末間の接続を仲介するが、同期用データ鍵は確認済みの端末間チャネルで暗号化して渡す。承認要求は一回限りかつ短時間で失効させる。具体的な暗号プロトコルは実装前に別途選定する。
-- 同期有効時の「全履歴削除」はアカウント全体へ適用し、サーバー上の同期用暗号文と、すべての承認済み端末にある同期対象の利用履歴を削除する。設定と起動メトリクスは対象に含めない。
+- 同期有効時の「全履歴削除」はアカウント全体へ適用し、サーバー上の同期用暗号文と、すべての承認済み端末にある同期対象の利用履歴を削除する。設定は対象に含めない。
 - 全履歴削除時に履歴世代を更新し、サーバーは古い世代のレコードを受け付けない。承認済み端末は新しい世代を確認した後、未送信レコードを含む古い履歴を削除してから同期を再開する。
 - オフラインまたは到達不能な承認済み端末については即時削除を保証せず、次回同期時に古い履歴を削除する。これは全履歴削除の保証境界として許容する。
 - 承認済み端末を削除した場合、サーバー上の端末認可を取り消すとともに同期用データ鍵の世代を更新する。削除後に作成する同期レコードは新しい鍵世代で暗号化する。
 - 新しい同期用データ鍵は、残る承認済み端末だけが取得できるよう端末ごとに暗号化して配布する。削除端末には配布せず、削除後の履歴を復号できないようにする。
 - 端末削除時に過去の同期レコードを削除または再暗号化しない。残る承認済み端末は旧鍵を保持し、後から追加する承認済み端末にも過去履歴の復号に必要な旧鍵を端末間で渡す。
 - 端末削除と履歴削除を別操作として扱う。過去履歴も消す場合は、端末削除ではなくアカウント全体の「全履歴削除」を使用する。
-- 初期の同期対象は、利用セッションと、その表示に必要な最小限のアプリ情報だけに限定する。設定と起動メトリクスは端末内に保持し、同期しない。
+- 初期の同期対象は、利用セッションと、その表示に必要な最小限のアプリ情報だけに限定する。設定は端末内に保持し、同期しない。
 - E2EE同期レコードは不変の追記専用データとする。送信元端末は暗号化前に推測困難な一意のレコードIDを生成し、一度同期した内容を更新しない。
 - 送信に失敗した場合は同じレコードIDと暗号文を再送する。サーバーはレコードIDを使って冪等に受け付け、同じIDに異なる暗号文が送られた場合は拒否する。
 - サーバーが同期レコードごとに永続化する平文メタデータは、アカウントへの所属、無作為なレコードID、履歴世代、同期鍵世代、サーバーが割り当てる同期順序および暗号文サイズに限定する。
@@ -110,14 +110,14 @@ References:
 - Treat operating-system user login as the local trust boundary on an authorized device and unlock the device key automatically when Time Wise starts. Do not require a separate Time Wise passphrase.
 - Initial device enrollment requires the existing authorized device and the new device to be online simultaneously. Display the same short authentication code on both devices and require the user to compare it and explicitly approve enrollment on the existing device.
 - The server brokers the device connection, but the synchronization data key is transferred through an encrypted channel between the verified devices. Enrollment requests are single-use and expire quickly. Select the concrete cryptographic protocol separately before implementation.
-- When synchronization is enabled, Delete all history is an account-wide operation that removes synchronization ciphertext from the server and synchronized usage history from every authorized device. It does not delete settings or startup metrics.
+- When synchronization is enabled, Delete all history is an account-wide operation that removes synchronization ciphertext from the server and synchronized usage history from every authorized device. It does not delete settings.
 - Advance a history generation when all history is deleted, and reject records from older generations at the server. After observing the new generation, authorized devices delete old history, including pending uploads, before resuming synchronization.
 - Do not guarantee immediate deletion on offline or unreachable authorized devices; delete their old history when they next synchronize. This is an accepted boundary of Delete all history.
 - When an authorized device is removed, revoke its server authorization and advance the synchronization data-key generation. Encrypt synchronization records created after removal with the new key generation.
 - Distribute the new synchronization data key encrypted separately for each remaining authorized device. Do not distribute it to the removed device, preventing that device from decrypting history created after removal.
 - Do not delete or re-encrypt historical synchronization records when removing a device. Remaining authorized devices retain old keys, and a subsequently enrolled authorized device receives the old keys required to decrypt history through device-to-device transfer.
 - Treat device removal and history deletion as separate operations. To remove historical data as well, use the account-wide Delete all history operation rather than device removal.
-- Limit initial synchronization to usage sessions and the minimum application information needed to display them. Keep settings and startup metrics on the device and do not synchronize them.
+- Limit initial synchronization to usage sessions and the minimum application information needed to display them. Keep settings on the device and do not synchronize them.
 - Make E2EE synchronization records immutable and append-only. Before encryption, the source device generates an unpredictable unique record identifier and never updates a record after synchronization.
 - Retry a failed upload with the same record identifier and ciphertext. The server accepts it idempotently by record identifier and rejects different ciphertext submitted under an existing identifier.
 - Limit plaintext metadata persisted per synchronization record to account membership, a random record identifier, history generation, synchronization key generation, a server-assigned synchronization order, and ciphertext size.

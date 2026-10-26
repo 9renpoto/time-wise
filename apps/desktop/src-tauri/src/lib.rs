@@ -1,20 +1,15 @@
 mod app_identity;
-mod app_usage;
 mod platform;
 pub mod secure_storage;
-mod startup_metrics;
 pub mod usage_history;
 mod usage_queries;
 mod usage_recorder;
 
 use std::env;
-use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, SystemTime};
 
-use app_usage::{AppUsageRecord, AppUsageRecorder, APP_USAGE_POLL_INTERVAL};
-use startup_metrics::{fetch_startup_records, StartupMetrics};
 use tauri::{
     image::Image,
     menu::{MenuBuilder, MenuItem},
@@ -26,7 +21,6 @@ use usage_history::UsageHistoryStore;
 use usage_queries::{fetch_daily_usage_summary, fetch_weekly_usage_summary};
 use usage_recorder::{MeasurementHealth, UsageRecorder, CHECKPOINT_INTERVAL_SECONDS};
 
-use sysinfo::{get_current_pid, ProcessRefreshKind, ProcessesToUpdate, RefreshKind, System};
 #[cfg(not(target_os = "linux"))]
 use tauri::tray::TrayIconEvent;
 #[cfg(target_os = "linux")]
@@ -247,8 +241,6 @@ fn current_utc_ms() -> u64 {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let startup_instant = Instant::now();
-
     let builder = tauri::Builder::default()
         // Register this first so duplicate launches exit before initializing
         // autostart, windows, tray icons, or measurement workers.
@@ -265,10 +257,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             complete_onboarding,
             delete_all_usage_history,
-            fetch_app_usage_records,
             fetch_daily_usage_summary,
             fetch_measurement_health,
-            fetch_startup_records,
             fetch_weekly_usage_summary,
             get_autostart_enabled,
             get_onboarding_completed,
@@ -285,33 +275,6 @@ pub fn run() {
                     eprintln!("failed to remove development autostart registration: {err}");
                 }
             }
-
-            let app_usage_recorder = AppUsageRecorder::default();
-            if let Err(err) = app_usage_recorder.record_current_processes() {
-                eprintln!("failed to seed app usage data: {err}");
-            }
-
-            let recorder_for_task = app_usage_recorder.clone();
-            tauri::async_runtime::spawn(async move {
-                loop {
-                    tokio::time::sleep(APP_USAGE_POLL_INTERVAL).await;
-                    if let Err(err) = recorder_for_task.record_current_processes() {
-                        eprintln!("failed to record app usage: {err}");
-                    }
-                }
-            });
-
-            app.manage(app_usage_recorder);
-
-            let storage_path = app
-                .path()
-                .resolve("startup_times.sqlite", BaseDirectory::AppData)
-                .unwrap_or_else(|err| {
-                    eprintln!("failed to resolve startup metrics path: {err}");
-                    env::temp_dir().join("time-wise-startup-times.sqlite")
-                });
-            let metrics = StartupMetrics::with_storage_path(storage_path);
-            app.manage(metrics);
 
             let usage_history_path = app
                 .path()
@@ -494,16 +457,8 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
-    let launcher = resolve_launcher_name();
-
-    app.run(move |app_handle, event| match event {
-        RunEvent::Ready => {
-            let metrics = app_handle.state::<StartupMetrics>();
-            if let Err(err) = metrics.record_startup(startup_instant.elapsed(), launcher.clone()) {
-                eprintln!("failed to record startup time: {err}");
-            }
-        }
-        RunEvent::Exit => {
+    app.run(move |app_handle, event| {
+        if let RunEvent::Exit = event {
             if let Some(recorder) = app_handle.try_state::<Arc<UsageRecorder>>() {
                 recorder.stop(SystemTime::now());
                 let diagnostics = recorder.diagnostics();
@@ -512,94 +467,7 @@ pub fn run() {
                 }
             }
         }
-        _ => {}
     });
-}
-
-fn resolve_launcher_name() -> String {
-    let refresh = RefreshKind::nothing().with_processes(ProcessRefreshKind::everything());
-    let mut system = System::new_with_specifics(refresh);
-    system.refresh_processes(ProcessesToUpdate::All, true);
-
-    let mut pid = match get_current_pid() {
-        Ok(pid) => pid,
-        Err(_) => return "unknown".to_string(),
-    };
-
-    let mut fallback: Option<String> = None;
-
-    for _ in 0..10 {
-        let process = match system.process(pid) {
-            Some(process) => process,
-            None => break,
-        };
-
-        let parent_pid = match process.parent() {
-            Some(parent) => parent,
-            None => break,
-        };
-
-        let parent_process = match system.process(parent_pid) {
-            Some(process) => process,
-            None => break,
-        };
-
-        if let Some(path) = parent_process.exe() {
-            if let Some(path_str) = path.to_str() {
-                if let Some(app_name) = extract_app_name(path_str) {
-                    return app_name;
-                }
-            }
-        }
-
-        if let Some(name) = process_name(parent_process) {
-            fallback = Some(name);
-        }
-
-        pid = parent_pid;
-    }
-
-    fallback.unwrap_or_else(|| "unknown".to_string())
-}
-
-fn process_name(process: &sysinfo::Process) -> Option<String> {
-    let name = process.name();
-    if name.is_empty() {
-        return None;
-    }
-    let name = name.to_string_lossy();
-    let trimmed = name.trim();
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed.to_string())
-    }
-}
-
-fn extract_app_name(path: &str) -> Option<String> {
-    if let Some(index) = path.find(".app/") {
-        let prefix = &path[..index];
-        if let Some(app_name) = prefix.rsplit('/').next() {
-            if !app_name.is_empty() {
-                return Some(app_name.to_string());
-            }
-        }
-    }
-
-    if path.ends_with(".exe") {
-        return Path::new(path)
-            .file_stem()
-            .map(|stem| stem.to_string_lossy().to_string());
-    }
-
-    None
-}
-
-#[tauri::command]
-async fn fetch_app_usage_records(
-    state: State<'_, AppUsageRecorder>,
-) -> Result<Vec<AppUsageRecord>, ()> {
-    Ok(state.records())
 }
 
 #[cfg(test)]
@@ -726,30 +594,7 @@ mod tests {
     }
 
     #[test]
-    fn test_extract_app_name() {
-        assert_eq!(
-            extract_app_name("/Applications/Focus.app/Contents/MacOS/Focus"),
-            Some("Focus".to_string())
-        );
-        assert_eq!(
-            extract_app_name("/Program Files/Editor/Editor.exe"),
-            Some("Editor".to_string())
-        );
-        assert_eq!(extract_app_name("/usr/local/bin/my_tool"), None);
-        assert_eq!(
-            extract_app_name("/Applications/.app/Contents/MacOS/Tool"),
-            None
-        );
-    }
-
-    #[test]
     fn test_current_utc_ms() {
         assert!(current_utc_ms() > 0);
-    }
-
-    #[test]
-    fn test_resolve_launcher_name() {
-        let name = resolve_launcher_name();
-        assert!(!name.is_empty());
     }
 }
