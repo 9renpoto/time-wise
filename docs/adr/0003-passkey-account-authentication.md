@@ -1,8 +1,26 @@
-# ADR 0003: パスキーによるアカウント認証 / Passkey account authentication
+# ADR 0003: Passkey account authentication (superseded)
+
+- Status: Superseded by [ADR 0004](0004-github-account-authentication.md) on 2026-10-27.
+
+The current milestone uses GitHub authentication and defers application-managed
+passkeys. The proposal below is historical and does not define current
+acceptance criteria. Track current work in issue #249 and its sub-issues.
+
+<details>
+<summary>日本語</summary>
+
+2026-10-27にADR 0004で置き換えた。今回の認証はGitHubを採用し、
+アプリ管理のパスキーは見送る。以下は過去の提案であり、現在の完了条件ではない。
+現在の作業は#249配下で管理する。
+
+</details>
+
+<details>
+<summary>Historical proposal / 過去の提案</summary>
 
 - 状態 / Status: 検討中 / Proposed
 - 日付 / Date: 2026-09-04
-- 関連 / Related: [ADR 0002](0002-encrypt-usage-data-end-to-end.md), [タスク案 / Task plan](../plans/server-preparation.md)
+- 関連 / Related: [ADR 0002](0002-encrypt-usage-data-end-to-end.md), issue #249
 
 ## コンテキスト / Context
 
@@ -81,7 +99,7 @@ This is a design record for developers, not a description of implemented feature
 - セッションのログイン元パスキーとの関連、ブラウザーからデスクトップへの引き継ぎや更新後の関連維持、失効の反映タイミングを設計する。別のパスキーで再認証した際の扱いは未決。セッション失効は同期端末の承認取消や端末内の復号鍵の消去と同義ではない。
 - 自動生成する識別子の形式、衝突回避、内部IDと表示用識別子を分けるかを決める。メールや実名を生成元にせず、識別子そのものを認証の証明として扱わない。
 - RP ID、認証用ドメイン、許可するorigin、開発環境、対応OS・ブラウザーを決める。
-- 運営者が保有する `9renpoto.win` を認証ドメインの候補とする。`time-wise.9renpoto.win` はサブドメイン案であり、採用やDNS設定は未実施。長期維持、配布時のアプリ連携、将来のドメイン変更を検討してからRP IDとともに確定する。別ドメインの取得も選択肢に残す。
+- 認証ドメインは未決。採用やDNS設定は未実施。
 - チャレンジの有効期限と一回性、登録途中の状態、セッションの失効・更新、ログアウト、アプリへの認証結果の受け渡しを設計する。
 - 公開登録の濫用対策と、ログ・認証情報・放置アカウントの保持期間、アカウント削除を設計する。
 - 最初の端末での同期鍵生成と承認状態の初期化、追加端末の承認は同期側のタスクとする。ADR 0002 自体は引き続き検討中であり、この文書で承認済みに変更しない。
@@ -93,7 +111,9 @@ This is a design record for developers, not a description of implemented feature
 - Design session association with the login passkey, preservation of that association through browser-to-desktop handoff and renewal, and revocation enforcement timing. The effect of reauthentication with another passkey remains undecided. Session revocation is not synonymous with revoking synchronization-device authorization or erasing local decryption keys.
 - Define the generated identifier format, collision handling, and whether internal IDs and display identifiers are separate. Do not derive identifiers from email addresses or real names or treat an identifier itself as authentication proof.
 - Select the RP ID, authentication domain, allowed origins, development setup, and supported operating systems and browsers.
-- Consider the operator-owned `9renpoto.win` for authentication. `time-wise.9renpoto.win` is a proposed subdomain, not an adopted or configured domain. Decide it together with the RP ID after considering long-term maintenance, distributed-app integration and future domain changes. Acquiring another domain remains an option.
+- The authentication domain is undecided; no domain or DNS configuration has been adopted.
 - Design challenge expiry and single use, incomplete registration state, session revocation and renewal, logout, and authentication handoff to the desktop application.
 - Design public-registration abuse controls, retention of logs, authentication records and abandoned accounts, and account deletion.
 - Treat first-device synchronization-key generation and authorization bootstrap, followed by additional-device enrollment, as synchronization tasks. ADR 0002 remains Proposed; this record does not accept it.
+
+</details>
