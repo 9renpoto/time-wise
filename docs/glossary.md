@@ -165,6 +165,20 @@ GitHubの資格情報や、履歴を復号するための端末承認とは別�
 
 </details>
 
+## Authentication attempt / 認証試行
+
+One initiated request to authenticate an application account, ending in success,
+failure, cancellation, or expiry. An attempt can exist without a successful
+login or an application session.
+
+<details>
+<summary>日本語</summary>
+
+アプリアカウントの認証を開始してから、成功・失敗・取消・期限切れで終了するまでの
+一回の試行。ログイン成功やアプリsessionの成立前にも存在する。
+
+</details>
+
 ## Passkey / パスキー
 
 A public-key credential for account authentication, distinct from a
