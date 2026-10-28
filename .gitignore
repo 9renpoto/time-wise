@@ -4,3 +4,10 @@
 /node_modules/
 /docs/book/
 /.octocov/
+.celld/
+.wrangler/
+.dev.vars
+.dev.vars.*
+.env
+.env.local
+/tools/celld/fixture/build/
