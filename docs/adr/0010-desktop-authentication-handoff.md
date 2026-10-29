@@ -19,14 +19,27 @@ separate per-attempt verifier to consume the handoff once through the HTTPS API.
 Never reconstruct that verifier from URI parameters or accept an unknown
 attempt as a new login. Do not log raw URI or command-line arguments.
 
-Use these default official profiles, with a server-issued opaque attempt handle
-encoded as unpadded base64url. The values are configuration defaults, not literals
-to duplicate in native validation, server rendering or packaging:
+The desktop callback has this configuration-defined shape:
 
-| Environment | URI |
-| --- | --- |
-| Release | `io.github.9renpoto.time-wise:/auth/complete?attempt_id=HANDLE` |
-| Development | `io.github.9renpoto.time-wise.dev:/auth/complete?attempt_id=HANDLE` |
+```text
+<configured-scheme>:<configured-absolute-path>?attempt_id=<opaque-handle>
+```
+
+The placeholders are not literal URI characters. The absolute path starts with
+`/`; the handle is server-issued unpadded base64url. Neither `io.github` nor any
+particular account name is a protocol requirement, and GitHub Pages hosting is
+not required. Registration, native validation and server rendering use the
+build/deployment profile, rather than copying a concrete URI from this document.
+
+### Official build defaults
+
+These values describe the official distribution's defaults only. Fork builds
+may replace both scheme and path through their profile definition.
+
+| Environment | Default scheme | Default absolute path |
+| --- | --- | --- |
+| Release | `io.github.9renpoto.time-wise` | `/auth/complete` |
+| Development | `io.github.9renpoto.time-wise.dev` | `/auth/complete` |
 
 Maintain one versioned, nonsecret connection-profile definition for profile ID,
 environment, registered scheme and fixed return path. Generate Tauri scheme
@@ -541,10 +554,18 @@ URIには試行handleだけを載せ、provider/app token・identity・秘密ver
 受信だけでは認証せず、開始元desktopの試行別verifierで一回限りのHTTPS claimを行う。
 未知のURIから試行やverifierを作らず、生URIや起動引数をlogへ出さない。
 
-| 環境 | URI |
-| --- | --- |
-| 配布版 | `io.github.9renpoto.time-wise:/auth/complete?attempt_id=HANDLE` |
-| 開発版 | `io.github.9renpoto.time-wise.dev:/auth/complete?attempt_id=HANDLE` |
+callbackの契約形式は`<configured-scheme>:<configured-absolute-path>?attempt_id=<opaque-handle>`。
+山括弧部分は設定値で置き換え、pathは`/`で始める。`io.github`や特定のaccount名は仕様上の必須値ではなく、
+GitHub Pagesへの配置も不要。具体的なURIを本文からコピーせず、build/配置profileを登録・検証・生成に使う。
+
+### 公式ビルドの既定値
+
+以下は公式配布の既定値だけを示す。forkではprofile定義でschemeとpathを変更できる。
+
+| 環境 | 既定scheme | 既定絶対path |
+| --- | --- | --- |
+| 配布版 | `io.github.9renpoto.time-wise` | `/auth/complete` |
+| 開発版 | `io.github.9renpoto.time-wise.dev` | `/auth/complete` |
 
 上記は公式profileの既定値とし、文字列をnative検証・server画面・packageへ重複記述しない。
 profile ID・環境・登録scheme・固定復帰pathを一つのversion付き非秘密定義に集約し、
