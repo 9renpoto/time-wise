@@ -14,22 +14,23 @@ uses synthetic values for local verification, not an official deployment.
 
 ## Local verification
 
-Use the workspace Rust toolchain and install the pinned build tool:
+Use the workspace Rust toolchain. The build script prepares the matching tool automatically:
 
 ```sh
-cargo install worker-build --version 0.8.7 --locked
 cargo test -p time-wise-server --locked
 cargo clippy -p time-wise-server --all-targets --locked -- -D warnings
 sh apps/server/scripts/build.sh
 cargo test -p time-wise-server --test smoke worker_discovery -- --ignored
 ```
 
-The build script requires worker-build 0.8.7 and generates ignored JS/Wasm in
+The build script resolves the server's Wasm SDK from locked Cargo metadata,
+installs the same worker-build version into ignored `target/worker-tools` when
+needed, and generates ignored JS/Wasm in
 `apps/server/build/`. The entry point is `build/index.js`; the SDK's
 `build/worker/shim.mjs` is a compatibility alias, not the direct bundle.
 `no_bundle` prevents a second bundling step in celld/Wrangler.
 Use Rustup proxies on PATH; the build script resolves the repository-pinned
-compiler explicitly. `WORKER_BUILD` may point to that exact tool installed in a
+compiler explicitly. `WORKER_BUILD` may point to a matching-version tool in a
 custom directory. The smoke test builds the Worker, copies only its generated
 bundle and synthetic configuration to a temporary project, starts the pinned
 celld Docker image on an ephemeral localhost port, verifies HTTP behavior and
@@ -54,8 +55,9 @@ underscore・hyphenから1〜64文字、最大16件。不正設定は値を表�
 他の認証経路は503のまま。provider通信・資格情報・D1書込み・実loginは未実装。
 Wrangler設定は合成値によるlocal検証専用で、公式配置ではない。
 
-上記commandで固定worker-build 0.8.7を導入し、workspace toolchainで単体/lint/Wasm/HTTPを検証する。
-WORKER_BUILDで固定版toolのpathを指定可能。生成JS/Wasmはignoredなapps/server/buildへ出力する。
+build scriptがCargo.lockに従うWasm SDK版を解決し、同じworker-buildを必要ならtarget/worker-toolsへ自動導入する。
+workspace toolchainで単体/lint/Wasm/HTTPを検証する。
+WORKER_BUILDで対応版toolのpathを指定できるが、SDK版との不一致は拒否する。生成JS/Wasmはignoredなapps/server/buildへ出力する。
 smokeは生成物と合成設定だけを一時directoryへコピーし、隔離celldをlocalhostの一時portで起動する。
 HTTP・headerと、不正設定で再起動後の拒否を検証し、自分のcontainerと一時directoryを削除する。
 既存celldや配置を変更しない。Docker起動と初回download用networkが必要で、実provider秘密情報は使わない。
@@ -93,5 +95,30 @@ state that prevents cleanup. Interactive Compose defaults remain unchanged.
 
 Unixのsmokeでは一時directoryのUID/GIDをCELLD_UID/CELLD_GIDで渡し、Linuxのbind mountに
 root所有dataを残さず削除できるようにする。通常のCompose実行の既定値は変更しない。
+
+</details>
+
+## Dependency updates
+
+Cargo.lock is the version source for the SDK and its matching build tool.
+Dependabot's Cargo `rustwasm` group includes `worker`, its support crates and
+Wasm bindings; an SDK update PR automatically builds and tests the corresponding
+worker-build version through the smoke step. There are no CLI version literals
+in CI or the build script to update separately. Do not run `cargo update` during
+normal builds; committed lockfile changes remain reviewable.
+
+This policy deliberately tracks SDK/tool pairs, not independent CLI-only
+releases. A missing or incompatible matching tool fails the update's build/CI;
+it never silently falls back to another global installation. Actual Dependabot
+PR creation and hosted CI results are checked after configuration reaches main.
+
+<details>
+<summary>日本語</summary>
+
+SDKと対応build toolの版はCargo.lockを基準にする。DependabotのCargo rustwasm groupへworker・
+関連crate・Wasm bindingを含め、SDK更新PRで対応worker-buildのbuild/smokeも検証する。
+CIやshellの版番号を別更新せず、通常buildでcargo updateは行わない。
+SDK/toolの組を追跡し、CLI単独releaseの独立監視はしない。対応版がなければ更新CIを失敗させ、
+globalの別版へ暗黙fallbackしない。Dependabot PRの実生成とhosted CIはmain反映後に確認する。
 
 </details>
