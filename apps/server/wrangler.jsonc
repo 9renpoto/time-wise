@@ -1,0 +1,11 @@
+{
+  "name": "time-wise-server-local",
+  "main": "build/index.js",
+  "no_bundle": true,
+  "compatibility_date": "2026-10-29",
+  "build": { "command": "sh scripts/build.sh" },
+  "vars": {
+    "AUTH_ORIGIN": "https://auth.example.com",
+    "CLIENT_PROFILE_IDS": "[\"official-development-v1\"]"
+  }
+}

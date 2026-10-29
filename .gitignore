@@ -11,3 +11,4 @@
 .env
 .env.local
 /tools/celld/fixture/build/
+/apps/server/build/
