@@ -124,8 +124,16 @@ impl Sandbox {
     }
 
     fn compose(&self, args: &[&str]) -> Result<String, String> {
+        let mut command = Command::new("docker");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            let owner = fs::metadata(self.project.path()).map_err(|error| error.to_string())?;
+            command.env("CELLD_UID", owner.uid().to_string());
+            command.env("CELLD_GID", owner.gid().to_string());
+        }
         run(
-            Command::new("docker")
+            command
                 .args(["compose", "-f"])
                 .arg(root().join("compose.celld.yaml"))
                 .args(["-p", &self.name])

@@ -2,6 +2,7 @@ services:
   celld:
     image: ghcr.io/denoland/celld:v0.6.3@sha256:22bca1b40a9e4c434cc149d8913d7eaafa9792961a8c05f9fecf921d416216dc
     init: true
+    user: "${CELLD_UID:-0}:${CELLD_GID:-0}"
     working_dir: /project
     command: [dev, ., --host, 0.0.0.0, --port, "9876", --logs]
     environment:

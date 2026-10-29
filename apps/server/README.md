@@ -83,3 +83,15 @@ celld内のRust/Wasmとは別。子Wasm buildは計測flagを除去し独立targ
 Python runtimeは不要。
 
 </details>
+
+The smoke harness runs celld with the temporary directory owner's UID/GID on
+Unix hosts (`CELLD_UID`/`CELLD_GID`), so Linux bind mounts do not leave root-owned
+state that prevents cleanup. Interactive Compose defaults remain unchanged.
+
+<details>
+<summary>日本語</summary>
+
+Unixのsmokeでは一時directoryのUID/GIDをCELLD_UID/CELLD_GIDで渡し、Linuxのbind mountに
+root所有dataを残さず削除できるようにする。通常のCompose実行の既定値は変更しない。
+
+</details>
