@@ -115,9 +115,6 @@ jobs:
           LLVM_PROFILE_FILE: "cargo-test-%p.profraw"
         run: cargo nextest run --workspace --profile ci
 
-      - name: Install Worker build tool
-        run: cargo install worker-build --version 0.8.7 --locked
-
       - name: Run runtime smoke tests with coverage
         env:
           RUSTFLAGS: "-C instrument-coverage"

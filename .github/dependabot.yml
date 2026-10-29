@@ -31,6 +31,9 @@ updates:
           - "serde*"
       rustwasm:
         patterns:
+          - "worker"
+          - "worker-sys"
+          - "worker-macros"
           - "wasm-bindgen*"
           - "js-sys"
           - "web-sys"
