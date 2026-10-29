@@ -1,0 +1,12 @@
+services:
+  celld:
+    image: ghcr.io/denoland/celld:v0.6.3@sha256:22bca1b40a9e4c434cc149d8913d7eaafa9792961a8c05f9fecf921d416216dc
+    init: true
+    working_dir: /project
+    command: [dev, ., --host, 0.0.0.0, --port, "9876", --logs]
+    environment:
+      CELLD_OTEL: "0"
+    ports:
+      - "127.0.0.1:${CELLD_PORT:-9876}:9876"
+    volumes:
+      - "${CELLD_PROJECT_DIR:-./tools/celld/fixture}:/project"

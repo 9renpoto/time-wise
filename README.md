@@ -86,6 +86,17 @@ cargo tauri build
 To work on the web UI without the desktop shell, run `trunk serve` from
 `apps/desktop`.
 
+For local Cloudflare runtime development alongside the desktop app, see the
+[celld development environment](tools/celld/README.md).
+
+<details>
+<summary>日本語</summary>
+
+desktopと並行してCloudflare互換runtimeをローカル実行する手順は、
+[celld開発環境](tools/celld/README.md)を参照してください。
+
+</details>
+
 ## Documentation
 
 The [user guide](https://9renpoto.github.io/time-wise/) is available in Japanese
