@@ -85,12 +85,13 @@ fn execute() -> Result<(), Box<dyn std::error::Error>> {
             .join("bin/worker-build")
             .with_extension(std::env::consts::EXE_EXTENSION);
         if !matches_version(&tool, version) {
+            let requirement = format!("={version}");
             let status = cargo()
                 .args([
                     "install",
                     "worker-build",
                     "--version",
-                    version,
+                    &requirement,
                     "--locked",
                     "--force",
                     "--root",
