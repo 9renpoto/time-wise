@@ -19,13 +19,32 @@ separate per-attempt verifier to consume the handoff once through the HTTPS API.
 Never reconstruct that verifier from URI parameters or accept an unknown
 attempt as a new login. Do not log raw URI or command-line arguments.
 
-Use these exact, case-sensitive URI shapes, with a server-issued opaque attempt
-handle encoded as unpadded base64url:
+Use these default official profiles, with a server-issued opaque attempt handle
+encoded as unpadded base64url. The values are configuration defaults, not literals
+to duplicate in native validation, server rendering or packaging:
 
 | Environment | URI |
 | --- | --- |
 | Release | `io.github.9renpoto.time-wise:/auth/complete?attempt_id=HANDLE` |
 | Development | `io.github.9renpoto.time-wise.dev:/auth/complete?attempt_id=HANDLE` |
+
+Maintain one versioned, nonsecret connection-profile definition for profile ID,
+environment, registered scheme and fixed return path. Generate Tauri scheme
+registration, native validation constants and the server's available profile
+catalog from that definition; verify they agree during build/deployment checks.
+Each deployment explicitly enables an allowlisted subset of those profiles.
+Independent application builds may change the scheme to their own controlled
+namespace through this definition and rebuild; changing a desktop server URL
+does not change the installed application's registered scheme.
+
+Attempt creation selects a `client_profile_id` advertised by server configuration
+and already known to the desktop build. Reject missing, unknown, disabled or
+wrong-environment profiles before creating an attempt. Bind the selected profile
+and its versioned values immutably to the attempt, including after restart.
+Construct preview/return links only from that binding and the opaque handle.
+Never accept an arbitrary scheme, return URI, path or origin in a login request,
+and never learn a new accepted scheme from an incoming deep link. A profile
+change must not silently change an in-flight attempt's return destination.
 
 These URIs have no authority. Reject a host, user information, port, fragment,
 unexpected path, duplicate or additional query fields, invalid handle encoding,
@@ -184,7 +203,8 @@ release/development. A GitHub numeric ID on two deployments does not imply a
 shared application account; changing servers must not transfer credentials,
 history ownership or decryption authority. Validate the selected server's
 protocol before login, and bind each pending attempt to its selected origin.
-This client-distribution choice is accepted. Keep the selected origin in
+This client-distribution choice is accepted. The official profile IDs are `official-release-v1` and `official-development-v1`.
+Keep the selected origin in
 environment-specific local settings; changing it requires an explicit settings
 action and stops authenticated work against the previous selection. Never send
 an old deployment's tokens, claim verifiers or history to the new origin.
@@ -201,7 +221,8 @@ show the exact origin before opening browser authentication. The desktop's
 server URL setting never changes the fixed release/development URI scheme.
 If a handle matches multiple connection records, reject ambiguity rather than
 choose a server from the URI. Expose `GET /v1/auth/config` without credentials
-with `protocol_version: 1` and the deployment's canonical `auth_origin`; require
+with `protocol_version: 1`, the enabled `client_profile_ids`, and the deployment's
+canonical `auth_origin`; require
 an exact origin match and supported version before authentication. This is
 compatibility discovery, not independent proof of operator trust.
 Connection to a user-selected host does not establish permission to decrypt
@@ -313,7 +334,7 @@ that case. Cancellation never targets another attempt or a browser's other cooki
 Use one deployment-configured `AUTH_ORIGIN` per environment, HTTPS with no user
 information, path, query or fragment. Do not infer it from request headers or
 accept redirect/origin/scheme parameters. The environment also fixes its D1,
-Worker secrets, GitHub App and return scheme. Distinct HTTPS hostnames prevent
+Worker secrets, GitHub App and enabled return-profile catalog. Distinct HTTPS hostnames prevent
 cookie sharing; different ports on one hostname are insufficient. No default
 production hostname or implicit localhost fallback exists. Local celld HTTP is
 for synthetic providers/data only. Actual HTTPS values and registration gates
@@ -326,8 +347,8 @@ and do not expose permissive CORS. Bodies cannot select an account or return URL
 
 | Endpoint | Request / authentication | Success |
 | --- | --- | --- |
-| `POST /v1/auth/attempts` | `purpose: login` and `claim_challenge`; no application session required | 201, attempt descriptor below. |
-| `POST /v1/auth/attempts` | `purpose: reauthenticate`, `claim_challenge`, active application Bearer access | 201, descriptor bound to that session/account. |
+| `POST /v1/auth/attempts` | `purpose: login`, `claim_challenge`, `client_profile_id`; no application session required | 201, attempt descriptor below. |
+| `POST /v1/auth/attempts` | `purpose: reauthenticate`, `claim_challenge`, `client_profile_id`, active application Bearer access | 201, descriptor bound to that session/account. |
 | `GET /v1/auth/attempts/{id}` | Claim verifier | 200, state, comparison code, callback/handoff/hard deadlines and purpose; no identity or session secrets. |
 | `POST /v1/auth/attempts/{id}/claim` | Claim verifier, empty JSON | 200, ADR 0009 credential pair for login, or `{ "result": "reauthenticated", "verified_at_ms": 0 }` for reauthentication. |
 | `POST /v1/auth/attempts/{id}/cancel` | Claim verifier, empty JSON | 204, idempotent nonconsumed cancellation; 409 if already consumed. |
@@ -341,7 +362,7 @@ Creation request, with a synthetic challenge placeholder (actual values must
 meet the encoding and entropy requirements):
 
 ```json
-{"purpose":"login","claim_challenge":"synthetic-challenge"}
+{"purpose":"login","claim_challenge":"synthetic-challenge","client_profile_id":"official-release-v1"}
 ```
 
 Creation descriptor (synthetic clock starts at zero):
@@ -350,6 +371,7 @@ Creation descriptor (synthetic clock starts at zero):
 {
   "attempt_id": "synthetic-attempt",
   "purpose": "login",
+  "client_profile_id": "official-release-v1",
   "comparison_code": "7K3DM-P9W2R",
   "launch_url": "https://auth.example.com/auth/github/start?ticket=synthetic-ticket",
   "created_at_ms": 0,
@@ -361,7 +383,7 @@ Creation descriptor (synthetic clock starts at zero):
 Status includes the descriptor's nonsecret identifiers, purpose, code and
 deadlines plus `state`; omit `launch_url` and include nullable
 `handoff_expires_at_ms` until verified. Never recover a consumed launch ticket.
-Accept only exact purpose values, an encoded SHA-256 challenge, and no additional
+Accept only exact purpose values, an enabled profile ID, an encoded SHA-256 challenge, and no additional
 fields; return 400 `invalid_request` otherwise. Protect status and mutations
 before revealing existence: unknown ID and invalid verifier both return 404
 `attempt_unavailable`. A verified caller sees 409 `attempt_not_ready` or
@@ -392,7 +414,7 @@ URL already retained in browser history.
 ### Native recovery, lost responses and cleanup
 
 The local pending record contains environment, fixed origin, verifier, server
-handle, purpose, timestamps and selection state, with no GitHub tokens or
+handle, bound client profile, purpose, timestamps and selection state, with no GitHub tokens or
 history keys. Persist before opening the browser and before any claim. Do not
 store the launch URL durably or expose proof-bearing requests to frontend code.
 Never use the history key's `load_or_create` behavior to recover a missing proof.
@@ -452,6 +474,7 @@ restore still requires ADR 0008's external generation change.
 
 ### Acceptance specifications and delivery boundary
 
+- Verify generated registration, validation and server profiles agree; reject unknown/disabled profiles and preserve in-flight profile bindings.
 - Test exact release/development grammar, authority/fragment/encoding rejection,
   length limits, unknown attempts and wrong-environment records.
 - Race browser bootstrap, callback, confirmation, cancellation and claim; assert
@@ -509,6 +532,15 @@ URIには試行handleだけを載せ、provider/app token・identity・秘密ver
 | --- | --- |
 | 配布版 | `io.github.9renpoto.time-wise:/auth/complete?attempt_id=HANDLE` |
 | 開発版 | `io.github.9renpoto.time-wise.dev:/auth/complete?attempt_id=HANDLE` |
+
+上記は公式profileの既定値とし、文字列をnative検証・server画面・packageへ重複記述しない。
+profile ID・環境・登録scheme・固定復帰pathを一つのversion付き非秘密定義に集約し、
+Tauri登録・native検証定数・server catalogを生成してbuild/配置時に一致を検証する。
+公式IDはofficial-release-v1とofficial-development-v1。配置は有効にするprofileを明示許可する。
+独自buildは管理下のschemeへ定義を変更して再buildできるが、server URL設定だけでは登録schemeを変えない。
+試行作成で既知かつserverが許可するclient_profile_idを選び、不明・無効・別環境は作成前に拒否する。
+選択profileとversion付きの値を試行に固定し、再起動・設定変更で復帰先を変えない。
+任意scheme・URI・path・originを要求で受け取らず、受信URIから新しいschemeを学習しない。
 
 HANDLEはserver発行の43文字unpadded base64url。大小文字を区別し、authority・host・user情報・port・
 fragment・別path・重複/余分なquery・別encoding・別環境scheme・256byte超を拒否する。
@@ -580,7 +612,7 @@ account・session・保留記録を配置identityと開発/配布環境で分離
 native認証要求で別originへのredirectを追わない。browser認証開始前に正確な接続先を表示する。
 接続先設定で固定の開発/配布URI schemeを変えず、既存履歴の復号・upload権限も与えない。
 handleが複数接続先に一致する場合は曖昧として拒否し、URIからserverを選ばない。
-GET /v1/auth/configを資格情報なしで取得し、protocol_version: 1とauth_originの厳密一致を
+GET /v1/auth/configを資格情報なしで取得し、protocol_version: 1、有効client_profile_ids、auth_originの厳密一致を
 login前に検査する。これは互換性確認であり運用者への信頼の証明ではない。
 非対応serverへ他接続先の資格情報を送らない。
 
@@ -639,7 +671,7 @@ browser cookieや寛容なCORSでnative APIを認証せず、要求でaccountや
 
 | Endpoint | 要求・結果 |
 | --- | --- |
-| POST /v1/auth/attempts | purposeとclaim_challenge。loginはsession不要、reauthenticateは有効accessが必要。201でdescriptor。 |
+| POST /v1/auth/attempts | purpose・claim_challenge・client_profile_id。loginはsession不要、reauthenticateは有効accessが必要。201でdescriptor。 |
 | GET /v1/auth/attempts/{id} | verifierで200。状態・code・purpose・期限。起動URL・identity・session秘密情報を返さない。 |
 | POST /v1/auth/attempts/{id}/claim | verifierと空JSON。200でlogin資格情報または再本人確認のresult/verified_at_ms。 |
 | POST /v1/auth/attempts/{id}/cancel | verifierと空JSON。204、既消費は409。 |
@@ -666,7 +698,7 @@ provider errorを表示せず、外部asset・script・analytics・任意linkを
 
 ### native回復と削除
 
-保留記録は環境・固定origin・verifier・handle・purpose・期限・選択状態をOS storeへ保存する。
+保留記録は環境・固定origin・verifier・handle・固定profile・purpose・期限・選択状態をOS storeへ保存する。
 GitHub token・履歴鍵・起動URLを永続化せず、秘密APIをfrontendへ渡さない。欠落proofを履歴鍵の
 load_or_createで再生成しない。起動時/既存instanceのURIを試行ごとに重複抑止し、受信・再起動・手動再確認時に
 だけ状態を取得する。背景pollingはしない。verifiedはcode表示だけ、readyは選択・切替確認後にclaimする。
@@ -695,6 +727,7 @@ claim中markerだけがあり受領記録と有効な資格情報がない場合
 
 ### 受け入れ仕様と担当境界
 
+- 生成した登録・検証・server profileの一致、不明/無効profileの拒否と試行の固定先維持を検証する。
 - URI grammar・長さ・encoding・別環境・不明試行を検証する。
 - 起動、callback、確認、取消、claimの競合で一回性と敗者の従属書込みがないことを検証する。
 - cookie欠落・入替・Origin/CSRF不正で他試行を消費せず、URI/code/ticket/送信済みchallengeだけでは元verifierとして認証できないことを検証する。
