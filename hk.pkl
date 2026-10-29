@@ -1,0 +1,54 @@
+amends "package://github.com/jdx/hk/releases/download/v2.7.1/hk@2.7.1#/Config.pkl"
+
+min_hk_version = "2.7.1"
+
+steps {
+  ["cargo-sort"] {
+    glob = Regex(#"(^|/)Cargo\.toml$"#)
+    check = "cargo sort --check"
+  }
+
+  ["cargo-fmt"] {
+    glob = Regex(#"\.rs$"#)
+    check = "cargo fmt -- --check"
+  }
+}
+
+hooks {
+  ["pre-push"] {
+    steps {
+      ["clippy-workspace"] {
+        glob = Regex(#"^Cargo\.(toml|lock)$"#)
+        check = "cargo clippy --workspace --bins --tests --examples -- -D rust_2018_idioms -D warnings"
+      }
+      ["clippy-ui"] {
+        glob = Regex(#"^apps/desktop/src/.*\.rs$"#)
+        check = "cargo clippy -p time-wise-ui --bins --tests --examples -- -D rust_2018_idioms -D warnings"
+      }
+      ["clippy-server"] {
+        glob = Regex("^apps/server/")
+        check = "cargo clippy -p time-wise-server --all-targets -- -D rust_2018_idioms -D warnings"
+      }
+      ["clippy-tauri"] {
+        glob = Regex("^apps/desktop/src-tauri/")
+        check = "cargo clippy -p time-wise --bins --tests --examples -- -D rust_2018_idioms -D warnings"
+      }
+      ["test-workspace"] {
+        glob = Regex(#"^Cargo\.(toml|lock)$"#)
+        check = "cargo test --workspace"
+      }
+      ["test-ui"] {
+        glob = Regex(#"^apps/desktop/src/.*\.rs$"#)
+        check = "cargo test -p time-wise-ui"
+      }
+      ["test-server"] {
+        glob = Regex("^apps/server/")
+        check = "cargo test -p time-wise-server"
+      }
+      ["test-tauri"] {
+        glob = Regex("^apps/desktop/src-tauri/")
+        check = "cargo test -p time-wise"
+      }
+    }
+  }
+}

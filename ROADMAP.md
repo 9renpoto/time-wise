@@ -21,7 +21,13 @@
     - `apps/desktop` からの `cargo tauri dev` によるライブリロード開発環境。
     - `cargo fmt`, `cargo clippy`, `cargo test` などの静的解析・テストコマンドが整備済み。
     - GitHub Actions を利用した CI パイプラインが構築されており、Ubuntu、Windows、macOS でコードフォーマット、ビルド、テストが自動実行される。
-    - `prek` による pre-commit / pre-push フックが設定済み。
+    - Git hooks use hk; shared linters come from the global hk configuration.
+      <details>
+      <summary>日本語</summary>
+
+      Git hook は hk を使い、共通 lint は hk のグローバル設定から実行する。
+
+      </details>
 
 ## 2. 短期的な目標 (v0.1.0 ベータ版リリース)
 

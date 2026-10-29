@@ -125,9 +125,16 @@ cargo clippy --workspace -- -D warnings
 cargo test --workspace
 ```
 
-Install the repository hooks with `prek install --overwrite` and
-`prek install --overwrite --hook-type pre-push`. Include screenshots or a GIF
-when changing the desktop UI.
+Install hk 2.7.1 or newer, then run `hk install` to enable the repository
+hooks. Include screenshots or a GIF when changing the desktop UI.
+
+<details>
+<summary>日本語</summary>
+
+hk 2.7.1 以降をインストールし、`hk install` を実行してリポジトリの hook を有効にしてください。
+デスクトップ UI を変更する場合は、スクリーンショットまたは GIF を添付してください。
+
+</details>
 
 Release maintainers: see [the tag-based release guide](docs/releasing.md) for
 tap setup, version preparation, and publishing.

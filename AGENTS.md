@@ -23,7 +23,7 @@
 ## Testing Guidelines
 - Co-locate unit tests in the same file under `#[cfg(test)]`; integration tests belong in `tests/`.
 - Keep tests deterministic and lightweight—mock IO when possible.
-- Let prek and CI select package-level tests for isolated changes. Run `cargo test --workspace` for shared manifests, cross-package changes, and release validation; pushes to `main` refresh full-workspace coverage via grcov/Octocov.
+- Let hk and CI select package-level checks for isolated changes. Run `cargo test --workspace` for shared manifests, cross-package changes, and release validation; pushes to `main` refresh full-workspace coverage via grcov/Octocov.
 
 ## Commit & Pull Request Guidelines
 - Follow Conventional Commits (`feat:`, `fix:`, `chore:`). Example: `feat: add settings tray entry`.
@@ -31,7 +31,7 @@
 - Verify `fmt`, `clippy`, and `test` locally. Capture non-obvious decisions—like window positioning or database schema changes—in the PR body to streamline review.
 
 ## Security & Configuration Tips
-- Never commit secrets; install prek with `cargo install --locked prek`, then install the hooks with `prek install --overwrite` and `prek install --overwrite --hook-type pre-push`. Prek runs fail-first checks and selects Rust verification from the files changed before pushes.
+- Never commit secrets; install hk and run `hk install` to enable repository hooks. The hk configuration keeps shared linters in the global hk config and selects Rust verification from changed files before pushes.
 - Linux contributors must install WebKitGTK and libappindicator (see `README.md`) before running `cargo tauri dev` from `apps/desktop` to match CI requirements.
 
 ## Review & Documentation Language
