@@ -33,9 +33,22 @@ environment, registered scheme and fixed return path. Generate Tauri scheme
 registration, native validation constants and the server's available profile
 catalog from that definition; verify they agree during build/deployment checks.
 Each deployment explicitly enables an allowlisted subset of those profiles.
-Independent application builds may change the scheme to their own controlled
-namespace through this definition and rebuild; changing a desktop server URL
-does not change the installed application's registered scheme.
+Fork maintainers may freely specify their own desktop callback URI at build
+time through this definition, including its scheme and callback path; they are
+not restricted to the official profile IDs, namespace or `/auth/complete` path.
+Validate the configured URI against the supported private-use URI grammar
+(scheme and absolute path, no authority, user information, port, query or fragment).
+Append only the protocol-defined `attempt_id` query when constructing a return.
+Generate packaging registration and exact native validation from those configured
+values. The installed binary accepts its build-time callback, not arbitrary
+destinations received at runtime. Fork operators install the corresponding
+versioned profile in their server's allowlist before login. Changing a desktop
+server URL does not change the installed application's registered callback.
+
+Here "desktop callback URI" means the custom-protocol browser-to-app return.
+The separate GitHub provider callback is the configured deployment's HTTPS
+`/auth/github/callback`, registered in that operator's GitHub App. Neither is
+selected from an untrusted login request.
 
 Attempt creation selects a `client_profile_id` advertised by server configuration
 and already known to the desktop build. Reject missing, unknown, disabled or
@@ -538,6 +551,13 @@ profile ID・環境・登録scheme・固定復帰pathを一つのversion付き�
 Tauri登録・native検証定数・server catalogを生成してbuild/配置時に一致を検証する。
 公式IDはofficial-release-v1とofficial-development-v1。配置は有効にするprofileを明示許可する。
 独自buildは管理下のschemeへ定義を変更して再buildできるが、server URL設定だけでは登録schemeを変えない。
+forkしたアプリでは、公式profile ID・namespace・/auth/completeに制限せず、ビルド時に独自の
+desktop callback URI（schemeとpath）を自由に指定できる。対応するprivate-use形式として
+authority・user情報・port・query・fragmentを含まないことを検証し、復帰時にattempt_idだけを追加する。
+指定値からpackage登録とnativeの厳密な検証を生成する。実行時に任意の戻り先を受理する意味ではない。
+運用者は対応するversion付きprofileをserverの許可設定へ登録してからloginする。
+ここでのcallbackはbrowserからアプリへの専用URIであり、GitHubからserverへ戻るHTTPSの
+/auth/github/callbackとは別物。後者は配置先originとGitHub App登録に従う。
 試行作成で既知かつserverが許可するclient_profile_idを選び、不明・無効・別環境は作成前に拒否する。
 選択profileとversion付きの値を試行に固定し、再起動・設定変更で復帰先を変えない。
 任意scheme・URI・path・originを要求で受け取らず、受信URIから新しいschemeを学習しない。
