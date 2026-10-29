@@ -548,6 +548,43 @@ by source inspection, while its guide primarily illustrates double-slash URLs.
 Neither source review nor scheme registration proves installed OS/browser delivery;
 acceptance must test the exact selected shape on both Windows and macOS.
 
+## Integrated design and implementation boundary (#193)
+
+Provider identity is governed by ADR 0005, primary consistency by ADR 0008,
+session lifecycle by ADR 0009, and the explicit refinements in this ADR take
+precedence for browser pages, session inspection/reverification, attempt-scoped
+revocation, configurable callback profiles and self-hosted connections.
+No new product decisions remain in #193. The following are implementation and
+acceptance obligations, not established runtime evidence:
+
+| Issue | Delivery boundary |
+| --- | --- |
+| #194 | Rust Worker foundation, deploy button/template, official DNS/HTTPS and operator GitHub App setup checks. |
+| #195 | D1 schema, guarded transactions, races and account identity uniqueness. |
+| #196 | GitHub provider calls and callback processing. |
+| #197 | Session rotation, freshness and revocation. |
+| #199 | Attempt, browser binding, confirmation and handoff APIs. |
+| #200 | Generated URI profiles and official Tauri/OS integration. |
+| #201 | Connection selection, credential storage and restart/lost-response recovery. |
+| #202 | Abuse limits, safe logs, restore generation and operational gates. |
+| #203 | Physical Windows/macOS and real provider/deployment acceptance. |
+
+Deployment does not imply credential registration or HTTPS acceptance; local
+celld does not establish Cloudflare concurrency, restore or OS delivery behavior.
+Fork configuration remains supported, and no issue is completed merely by this
+implementation mapping. This integration resolves #193's design scope only.
+
+<details>
+<summary>日本語</summary>
+
+provider identityはADR 0005、primary整合性は0008、sessionは0009に従う。
+画面、inspection/再本人確認、試行限定失効、callback profile、セルフホストは本ADRの明示追加を優先する。
+#193に新たなproduct判断は残っていない。上表の担当は実装・受け入れ義務であり、実行成功の証拠ではない。
+配置だけで登録・HTTPS受け入れ済みとせず、local celldだけでCloudflare競合・復元・OS配送を確認したとしない。
+fork設定を維持し、この対応表だけで実装issueを完了しない。今回解決するのは#193の設計範囲だけ。
+
+</details>
+
 ## References
 
 - [Native application URI schemes](https://www.rfc-editor.org/rfc/rfc8252.html#section-7.1)

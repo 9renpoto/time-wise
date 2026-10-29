@@ -4,6 +4,25 @@
 - Date: 2026-10-29
 - Related: [ADR 0005](0005-github-authorization-contract.md), issues #269 and #193
 
+## Integrated contract resolution (#193)
+
+[ADR 0009](0009-application-sessions.md) and
+[ADR 0010](0010-desktop-authentication-handoff.md) resolve the session, browser
+binding, cancellation, timeout, deployment and handoff decisions originally
+listed as open below. ADR 0010's explicit issued-session revocation operation
+is separate from cancellation: it atomically prevents issuance or revokes only
+the session linked to that attempt, without reopening or reissuing a handoff.
+The D1 consistency and external restore-generation guarantees remain required.
+
+<details>
+<summary>日本語</summary>
+
+下記で未決としたsession・browser関連付け・取消・期限・配置・引き渡しはADR 0009・0010で確定した。
+ADR 0010の明示的な発行session失効は取消と別の操作で、将来の発行を原子的に防ぐか、
+その試行のsessionだけを失効する。引き渡しの再開・再発行はしない。D1整合性と復元generationの保証は維持する。
+
+</details>
+
 ## Persistence decision
 
 Keep authentication attempts, GitHub identity associations, desktop handoff

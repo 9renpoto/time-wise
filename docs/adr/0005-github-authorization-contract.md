@@ -4,6 +4,25 @@
 - Date: 2026-10-29
 - Related: [ADR 0004](0004-github-account-authentication.md), issues #251 and #193
 
+## Integrated contract resolution (#193)
+
+The remaining design is delivered by [ADR 0008](0008-application-authentication-state.md),
+[ADR 0009](0009-application-sessions.md), and [ADR 0010](0010-desktop-authentication-handoff.md).
+ADR 0010 supersedes the outcome-only/no-link page restriction for its first-party
+comparison/confirmation/return flow, and adds the reauthentication-only 409
+`identity_mismatch` outcome. Its profile-based desktop return is separate from
+the fixed per-deployment HTTPS GitHub callback. The remaining-decisions section
+below records the original dependency, not an outstanding design blocker.
+
+<details>
+<summary>日本語</summary>
+
+#193の残る設計はADR 0008・0009・0010で提供済み。ADR 0010はfirst-partyの照合・確認・復帰画面を
+許可し、再本人確認用409 identity_mismatchを追加する。profileによるdesktop復帰と、配置ごとに固定する
+GitHub HTTPS callbackは別物。下記の未決事項は当初の依存関係の記録で、現在の未解決blockerではない。
+
+</details>
+
 ## App registration decision
 
 Register a GitHub App for identity-only sign-in. Do not request additional
