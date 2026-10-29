@@ -4,6 +4,27 @@
 - Date: 2026-10-29
 - Related: [ADR 0005](0005-github-authorization-contract.md), [ADR 0008](0008-application-authentication-state.md), issues #270, #269 and #193
 
+## Integrated contract resolution (#193)
+
+[ADR 0010](0010-desktop-authentication-handoff.md) extends session inspection
+with nullable `reauthenticated_at_ms`, while `provider_verified_at_ms` remains
+the original thirty-day lifetime anchor. Reauthentication updates freshness on
+the same active session without issuing credentials or extending absolute expiry.
+ADR 0010 also grants a time-bounded original-attempt proof authority solely to
+prevent issuance or revoke that attempt's issued session after ambiguous claim
+completion. It does not change ordinary refresh-token logout or cancellation.
+Connection profiles and deployment-specific credential namespaces follow ADR 0010.
+
+<details>
+<summary>日本語</summary>
+
+ADR 0010によりinspectionへnullableなreauthenticated_at_msを追加する。provider_verified_at_msは
+元の30日期限の基準のままとし、同じ有効sessionの鮮度だけを更新して資格情報を再発行しない。
+応答喪失時は、期限付きの元試行proofで発行を防ぐか、その試行が発行したsessionだけを失効できる。
+通常refresh logoutや取消の意味は変えない。接続profileと配置ごとの資格情報分離はADR 0010に従う。
+
+</details>
+
 ## Application-session renewal decision
 
 Use application-owned access tokens valid for fifteen minutes and application
