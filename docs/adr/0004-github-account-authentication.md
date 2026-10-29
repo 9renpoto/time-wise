@@ -56,12 +56,14 @@ and Supabase comparison work is no longer part of this milestone.
 
 ## Decisions still required before implementation
 
-Issue #251 defines the GitHub authorization contract: application registration
-type and flow, permissions and retained identity fields, stable account binding,
-callback validation, token handling, and failure cases. Issue #193 defines
-Cloudflare storage, concurrency guarantees, session lifecycle, reauthentication,
-and desktop handoff. Endpoint names, status codes, schemas, domain values, and
-retention periods remain open until those contracts are recorded.
+[ADR 0005](0005-github-authorization-contract.md), tracked in #251, records the
+confirmed GitHub App authorization contract, permissions, retained identity,
+account binding, callback interface, token cleanup, and failure cases.
+Issue #193 still requires agreement on Cloudflare storage, concurrency
+guarantees, session lifecycle, reauthentication, and desktop handoff. Application
+start/cancel/poll/claim APIs, domain values, and session retention periods remain
+open until that contract is recorded. Authentication implementation remains gated
+on #193.
 
 ## References
 
@@ -115,9 +117,10 @@ RustとWorkersでパスキーが実現不能とは断定しない。今回の採
 
 ## 実装前の未決事項
 
-#251でGitHub側のアプリ登録種別・認可flow、権限、保持情報、安定したidentityとの
-関連付け、callback、token、異常系を定義する。#193でCloudflare保存先、同時要求、
-session、再認証、デスクトップへの引き渡しを定義する。endpoint名、status code、
-schema、domain、保持期間はこれらの契約で決める。
+#251で追跡する[ADR 0005](0005-github-authorization-contract.md)に、GitHub Appの
+認可契約・権限・保持情報・identityとの関連付け・callback・token後処理・異常系を記録した。
+#193ではCloudflare保存先、同時要求保証、session、再認証、desktopへの引き渡しの合意が
+引き続き必要。アプリの開始・取消・poll・claim API、domain、session保持期間はその契約で
+定義する。#193の合意までは認証実装に着手しない。
 
 </details>
