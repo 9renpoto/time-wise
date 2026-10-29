@@ -165,6 +165,32 @@ GitHubの資格情報や、履歴を復号するための端末承認とは別�
 
 </details>
 
+## Application access token / アプリアクセストークン
+
+A short-lived credential for using authenticated application APIs within an
+application session. It is distinct from a GitHub token and a history-decryption key.
+
+<details>
+<summary>日本語</summary>
+
+アプリsessionで認証済みAPIを利用するための短命な資格情報。
+GitHubのtokenや履歴の復号鍵とは別物。
+
+</details>
+
+## Application refresh token / アプリ更新トークン
+
+A credential for renewing access within an existing application session.
+Renewal does not perform a new GitHub login or authorize history decryption.
+
+<details>
+<summary>日本語</summary>
+
+既存のアプリsessionでアクセスを更新するための資格情報。
+更新はGitHubでの新しいログインや履歴復号の端末承認を意味しない。
+
+</details>
+
 ## Authentication attempt / 認証試行
 
 One initiated request to authenticate an application account, ending in success,
