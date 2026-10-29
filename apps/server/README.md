@@ -21,7 +21,7 @@ cargo install worker-build --version 0.8.7 --locked
 cargo test -p time-wise-server --locked
 cargo clippy -p time-wise-server --all-targets --locked -- -D warnings
 sh apps/server/scripts/build.sh
-python3 apps/server/scripts/smoke.py
+cargo test -p time-wise-server --test smoke worker_discovery -- --ignored
 ```
 
 The build script requires worker-build 0.8.7 and generates ignored JS/Wasm in
@@ -60,5 +60,38 @@ smokeは生成物と合成設定だけを一時directoryへコピーし、隔離
 HTTP・headerと、不正設定で再起動後の拒否を検証し、自分のcontainerと一時directoryを削除する。
 既存celldや配置を変更しない。Docker起動と初回download用networkが必要で、実provider秘密情報は使わない。
 セルフホスト配置は#278、公式DNS/HTTPSは#279で別途検証する。
+
+</details>
+
+## Smoke harness coverage
+
+The Rust integration tests live in `apps/server/tests/smoke.rs`, with shared
+subprocess/HTTP/cleanup support. Docker tests are ignored in ordinary workspace
+runs and executed explicitly by CI before grcov collection. Both normal and
+ignored test executions use Rust coverage instrumentation and feed the existing
+LCOV/Octocov report. This measures the native harness, not Rust/Wasm running
+inside celld. Child Wasm builds remove coverage instrumentation and use a
+separate target directory. No Python runtime is required.
+
+<details>
+<summary>日本語</summary>
+
+Rust統合テストはapps/server/tests/smoke.rsに置き、process/HTTP/cleanupを共有する。
+Docker検証は通常のworkspace実行ではignoreし、CIでgrcov収集前に明示実行する。
+通常・ignore双方の実行を計測し、既存LCOV/Octocovへ集約する。計測対象はnativeハーネスで、
+celld内のRust/Wasmとは別。子Wasm buildは計測flagを除去し独立target directoryを使う。
+Python runtimeは不要。
+
+</details>
+
+The smoke harness runs celld with the temporary directory owner's UID/GID on
+Unix hosts (`CELLD_UID`/`CELLD_GID`), so Linux bind mounts do not leave root-owned
+state that prevents cleanup. Interactive Compose defaults remain unchanged.
+
+<details>
+<summary>日本語</summary>
+
+Unixのsmokeでは一時directoryのUID/GIDをCELLD_UID/CELLD_GIDで渡し、Linuxのbind mountに
+root所有dataを残さず削除できるようにする。通常のCompose実行の既定値は変更しない。
 
 </details>
