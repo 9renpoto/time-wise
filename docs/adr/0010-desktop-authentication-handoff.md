@@ -38,8 +38,23 @@ may replace both scheme and path through their profile definition.
 
 | Environment | Default scheme | Default absolute path |
 | --- | --- | --- |
-| Release | `io.github.9renpoto.time-wise` | `/auth/complete` |
-| Development | `io.github.9renpoto.time-wise.dev` | `/auth/complete` |
+| Release | `win.9renpoto.time-wise` | `/auth/complete` |
+| Development | `win.9renpoto.time-wise.dev` | `/auth/complete` |
+
+The official deployment allocation uses the controlled `9renpoto.win` domain:
+
+| Environment | Authentication origin | GitHub provider callback |
+| --- | --- | --- |
+| Release | `https://auth.time-wise.9renpoto.win` | `https://auth.time-wise.9renpoto.win/auth/github/callback` |
+| Development | `https://auth-dev.time-wise.9renpoto.win` | `https://auth-dev.time-wise.9renpoto.win/auth/github/callback` |
+
+The desktop scheme uses the reverse-domain `win.9renpoto` namespace. These are
+allocated official deployment settings, not a requirement for forks or other
+self-hosted deployments. They do not change the existing release bundle ID or
+history storage identity. DNS records, Worker custom-domain bindings, TLS and
+GitHub App registration are implementation/acceptance work in #194; this ADR
+alone does not establish that the addresses are provisioned or reachable.
+
 
 Maintain one versioned, nonsecret connection-profile definition for profile ID,
 environment, registered scheme and fixed return path. Generate Tauri scheme
@@ -564,8 +579,21 @@ GitHub Pagesへの配置も不要。具体的なURIを本文からコピーせ�
 
 | 環境 | 既定scheme | 既定絶対path |
 | --- | --- | --- |
-| 配布版 | `io.github.9renpoto.time-wise` | `/auth/complete` |
-| 開発版 | `io.github.9renpoto.time-wise.dev` | `/auth/complete` |
+| 配布版 | `win.9renpoto.time-wise` | `/auth/complete` |
+| 開発版 | `win.9renpoto.time-wise.dev` | `/auth/complete` |
+
+公式配置は管理下の9renpoto.win配下に割り当てる。
+
+| 環境 | 認証origin | GitHub provider callback |
+| --- | --- | --- |
+| 配布版 | `https://auth.time-wise.9renpoto.win` | `https://auth.time-wise.9renpoto.win/auth/github/callback` |
+| 開発版 | `https://auth-dev.time-wise.9renpoto.win` | `https://auth-dev.time-wise.9renpoto.win/auth/github/callback` |
+
+専用schemeは逆domainのwin.9renpoto namespaceを使う。これらは公式配置の割当値であり、
+forkや別のセルフホストへ強制しない。既存の配布bundle ID・履歴保存identityは変更しない。
+DNS、Worker custom domain、TLS、GitHub App登録と疎通の確認は#194で実施する。
+このADRの記載だけで配置・到達確認済みとは扱わない。
+
 
 上記は公式profileの既定値とし、文字列をnative検証・server画面・packageへ重複記述しない。
 profile ID・環境・登録scheme・固定復帰pathを一つのversion付き非秘密定義に集約し、
