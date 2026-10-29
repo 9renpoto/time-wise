@@ -205,6 +205,34 @@ login or an application session.
 
 </details>
 
+## Desktop authentication handoff / デスクトップ認証引き渡し
+
+The one-time delivery of a completed authentication result to the desktop that
+initiated the attempt. It is separate from GitHub identity verification and
+does not authorize history decryption.
+
+<details>
+<summary>日本語</summary>
+
+認証試行を開始したdesktopへ、完了した認証結果を一回だけ渡す操作。
+GitHubによる本人確認とは別の段階であり、履歴の復号を承認しない。
+
+</details>
+
+## Handoff comparison code / 引き渡し照合コード
+
+A short value shown in the browser and the originating desktop so the user can
+check that both refer to the intended authentication attempt. It is not a
+credential or permission to decrypt history.
+
+<details>
+<summary>日本語</summary>
+
+browserと開始元desktopに表示し、意図した同じ認証試行であることを利用者が確認する短い値。
+資格情報や履歴復号の権限ではない。
+
+</details>
+
 ## Passkey / パスキー
 
 A public-key credential for account authentication, distinct from a
