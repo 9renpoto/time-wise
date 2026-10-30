@@ -239,14 +239,18 @@ fn current_utc_ms() -> u64 {
         .min(u64::MAX as u128) as u64
 }
 
+fn configure_positioner<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
+    builder.plugin(tauri_plugin_positioner::init())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let builder = tauri::Builder::default()
-        // Register this first so duplicate launches exit before initializing
-        // autostart, windows, tray icons, or measurement workers.
-        .plugin(tauri_plugin_single_instance::init(
-            |_app, _args, _working_directory| {},
-        ))
+    // Register this first so duplicate launches exit before initializing
+    // autostart, windows, tray icons, or measurement workers.
+    let builder = tauri::Builder::default().plugin(tauri_plugin_single_instance::init(
+        |_app, _args, _working_directory| {},
+    ));
+    let builder = configure_positioner(builder)
         .plugin(tauri_plugin_opener::init())
         .plugin({
             let builder = tauri_plugin_autostart::Builder::new().app_name(AUTOSTART_APP_NAME);
@@ -475,6 +479,28 @@ mod tests {
     use super::*;
     use std::cell::Cell;
     use std::sync::{atomic::Ordering, Mutex};
+
+    #[test]
+    fn positioner_handles_tray_events_after_initialization() {
+        use tauri::{
+            test::{mock_builder, mock_context, noop_assets},
+            tray::TrayIconEvent,
+            PhysicalPosition, PhysicalSize, Rect,
+        };
+
+        let app = configure_positioner(mock_builder())
+            .build(mock_context(noop_assets()))
+            .unwrap();
+        let event = TrayIconEvent::Enter {
+            id: "test".into(),
+            position: PhysicalPosition::new(10.0, 20.0),
+            rect: Rect {
+                position: PhysicalPosition::new(10.0, 20.0).into(),
+                size: PhysicalSize::new(16.0, 16.0).into(),
+            },
+        };
+        tauri_plugin_positioner::on_tray_event(app.handle(), &event);
+    }
 
     #[test]
     fn toggle_visible_should_invert() {
