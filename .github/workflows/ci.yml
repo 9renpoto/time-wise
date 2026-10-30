@@ -207,6 +207,7 @@ jobs:
       - name: Build Windows NSIS installer
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
         with:
+          projectPath: apps/desktop
           args: --bundles nsis
           uploadWorkflowArtifacts: true
           workflowArtifactNamePattern: windows-[arch]-[bundle]

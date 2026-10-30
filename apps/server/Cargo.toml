@@ -22,3 +22,7 @@ tempfile = "3"
 [[example]]
 name = "worker_tool"
 test = true
+
+[[example]]
+name = "deployment"
+test = true
