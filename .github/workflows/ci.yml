@@ -52,7 +52,7 @@ jobs:
                 verify=true
                 windows=true
                 ;;
-              apps/desktop/*|apps/server/*|tools/celld/*|compose.celld.yaml)
+              apps/desktop/*|apps/server/*|tools/celld/*|compose.celld.yaml|package.json|package-lock.json|wrangler.json)
                 verify=true
                 ;;
             esac
@@ -115,7 +115,14 @@ jobs:
           LLVM_PROFILE_FILE: "cargo-test-%p.profraw"
         run: cargo nextest run --workspace --profile ci
 
-      - name: Run runtime smoke tests with coverage
+      - name: Verify Cloudflare deployment package without remote changes
+        env:
+          WRANGLER_SEND_METRICS: "false"
+        run: |
+          npm ci
+          npm run deploy:dry-run
+
+      - name: Run runtime and local D1 smoke tests with coverage
         env:
           RUSTFLAGS: "-C instrument-coverage"
           LLVM_PROFILE_FILE: "cargo-smoke-%p-%m.profraw"
@@ -126,7 +133,7 @@ jobs:
         run: trunk build
 
       - name: Generate coverage report
-        run: grcov . --binary-path ./target/debug/deps/ -s . -t lcov --branch --ignore-not-existing --keep-only "apps/**" -o lcov.info
+        run: grcov . --binary-path ./target/debug/ -s . -t lcov --branch --ignore-not-existing --keep-only "apps/**" -o lcov.info
 
       - name: Upload workspace coverage
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

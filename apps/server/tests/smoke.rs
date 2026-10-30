@@ -2,6 +2,66 @@
 
 mod support;
 
+#[test]
+#[ignore = "requires npm ci and Node; local D1 only, no Cloudflare credentials"]
+fn deployment_migrations_preserve_existing_data_on_repeated_setup() {
+    use serde_json::json;
+    use std::{fs, process::Command, time::Duration};
+    let project = tempfile::tempdir().unwrap();
+    let migrations = project.path().join("migrations");
+    fs::create_dir(&migrations).unwrap();
+    fs::write(
+        migrations.join("0001_synthetic.sql"),
+        "CREATE TABLE synthetic_records (id INTEGER PRIMARY KEY, value TEXT NOT NULL);",
+    )
+    .unwrap();
+    fs::write(
+        project.path().join("wrangler.json"),
+        json!({
+            "name":"synthetic-deployment-check", "compatibility_date":"2026-10-29",
+            "d1_databases":[{"binding":"AUTH_DB", "database_name":"operator-selected-name", "database_id":"11111111-2222-3333-4444-555555555555", "migrations_dir":"migrations"}]
+        }).to_string(),
+    ).unwrap();
+    let run = |arguments: &[&str]| {
+        support::run(
+            Command::new("node")
+                .arg(support::root().join("node_modules/wrangler/bin/wrangler.js"))
+                .args(arguments)
+                .args(["--local", "--config", "wrangler.json"])
+                .current_dir(project.path())
+                .env("WRANGLER_SEND_METRICS", "false")
+                .env("CI", "true"),
+            Duration::from_secs(60),
+        )
+        .unwrap()
+    };
+    run(&["d1", "migrations", "apply", "AUTH_DB"]);
+    run(&[
+        "d1",
+        "execute",
+        "AUTH_DB",
+        "--command",
+        "INSERT INTO synthetic_records VALUES (1, 'retained');",
+    ]);
+    run(&["d1", "migrations", "apply", "AUTH_DB"]);
+    fs::write(
+        migrations.join("0002_synthetic.sql"),
+        "CREATE INDEX synthetic_value ON synthetic_records(value);",
+    )
+    .unwrap();
+    run(&["d1", "migrations", "apply", "AUTH_DB"]);
+    let result: serde_json::Value = serde_json::from_str(&run(&[
+        "d1",
+        "execute",
+        "AUTH_DB",
+        "--command",
+        "SELECT value FROM synthetic_records WHERE id=1;",
+        "--json",
+    ]))
+    .unwrap();
+    assert_eq!(result[0]["results"], json!([{"value":"retained"}]));
+}
+
 #[cfg(unix)]
 #[test]
 fn failed_commands_report_failure() {

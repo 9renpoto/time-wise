@@ -21,6 +21,7 @@ Linux is not a supported product target.
 - [Background](#background)
 - [Install](#install)
 - [Usage](#usage)
+- [Self-hosting](#self-hosting)
 - [Documentation](#documentation)
 - [Contributing](#contributing)
 - [License](#license)
@@ -94,6 +95,25 @@ For local Cloudflare runtime development alongside the desktop app, see the
 
 desktopと並行してCloudflare互換runtimeをローカル実行する手順は、
 [celld開発環境](tools/celld/README.md)を参照してください。
+
+</details>
+
+## Self-hosting
+
+Deploy the authentication **foundation** to your own Cloudflare account:
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https%3A%2F%2Fgithub.com%2F9renpoto%2Ftime-wise)
+
+Follow the [self-hosting guide](docs/self-hosting.md) for origin/profile settings,
+D1 setup and deployment checks. Authentication currently remains disabled; this
+button does not yet provide working GitHub login or desktop synchronization.
+
+<details>
+<summary>日本語</summary>
+
+認証基盤を自分のCloudflareへ配置できます。origin/profile・D1・検証は
+[セルフホスト手順](docs/self-hosting.md)を参照してください。
+現時点では認証は無効で、GitHub loginやdesktop同期は利用できません。
 
 </details>
 
