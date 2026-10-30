@@ -19,9 +19,15 @@ updates:
       actions:
         patterns:
           - "actions/*"
-      endbug:
+      jetli:
         patterns:
-          - "EndBug/*"
+          - "jetli/*"
+      taiki-e:
+        patterns:
+          - "taiki-e/*"
+      tauri-apps:
+        patterns:
+          - "tauri-apps/*"
     cooldown:
       default-days: 7
 
@@ -46,5 +52,23 @@ updates:
           - "wasm-bindgen*"
           - "js-sys"
           - "web-sys"
+    cooldown:
+      default-days: 7
+
+  - package-ecosystem: docker-compose
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    labels:
+      - "Type: Maintenance"
+    cooldown:
+      default-days: 7
+
+  - package-ecosystem: rust-toolchain
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    labels:
+      - "Type: Maintenance"
     cooldown:
       default-days: 7
