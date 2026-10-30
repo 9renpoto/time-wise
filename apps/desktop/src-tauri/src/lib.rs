@@ -480,6 +480,7 @@ mod tests {
     use std::cell::Cell;
     use std::sync::{atomic::Ordering, Mutex};
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn positioner_handles_tray_events_after_initialization() {
         use tauri::{
