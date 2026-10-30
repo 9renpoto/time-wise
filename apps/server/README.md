@@ -122,3 +122,47 @@ SDK/toolの組を追跡し、CLI単独releaseの独立監視はしない。対�
 globalの別版へ暗黙fallbackしない。Dependabot PRの実生成とhosted CIはmain反映後に確認する。
 
 </details>
+
+## Deployment runner
+
+Run deployment commands from the repository root with Node.js 24 LTS, npm,
+curl and a native C build toolchain. On Debian/Ubuntu, install
+`build-essential pkg-config libssl-dev ca-certificates curl`. The bootstrap uses
+the pinned Rust toolchain; the local Wrangler CLI is declared in package.json
+and package-lock.json.
+
+```sh
+npm ci
+npm run check:deployment
+npm run deploy:dry-run
+```
+
+The check command accepts the unprovisioned template. The dry-run builds and
+packages the Worker without changing Cloudflare resources. Before actual deployment,
+change AUTH_ORIGIN to your own canonical HTTPS origin and CLIENT_PROFILE_IDS to
+the enabled desktop profile IDs (a JSON array) in the root wrangler.json.
+Authenticate with `npx wrangler login`. For a new installation only, run
+`npx wrangler d1 create time-wise-auth` and set the returned database_id on the
+AUTH_DB binding. For an existing installation, retain its database and ID.
+Then run `npm run deploy`.
+
+Actual deployment rejects an absent, malformed or template database ID. It applies
+regular SQL migrations through AUTH_DB before deploying, stops on failure, and
+skips an empty migration directory. It does not create/reset/delete databases.
+Authentication remains disabled; schema, provider credentials and activation checks
+belong to subsequent authentication implementation tasks.
+
+<details>
+<summary>日本語</summary>
+
+repository rootでNode.js 24 LTS・npm・curl・C build toolchainを用意する。
+Debian/Ubuntuではbuild-essential pkg-config libssl-dev ca-certificates curlを導入する。
+Rustは固定toolchainをbootstrapし、Wranglerはpackage.json/lockで宣言した版を使う。
+npm ci、npm run check:deployment、npm run deploy:dry-runで資格情報不要の検証ができる。
+実配置前にrootのwrangler.jsonで自分のHTTPS originとprofile ID配列を設定し、
+npx wrangler loginで認証する。新規環境だけD1をcreateし、AUTH_DBへ返されたIDを設定する。
+既存環境は既存DB/IDを維持し、npm run deployを実行する。
+実配置はtemplate ID等を拒否し、migration失敗で停止する。DB reset/delete/createは行わない。
+空のmigrationはskipし、認証は後続taskまで無効にする。
+
+</details>

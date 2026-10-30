@@ -1,0 +1,26 @@
+{
+  "name": "time-wise-worker-deployment",
+  "private": true,
+  "scripts": {
+    "build": "npm run check:deployment && sh apps/server/scripts/with-rust.sh sh apps/server/scripts/build.sh",
+    "check:deployment": "sh apps/server/scripts/with-rust.sh cargo run --quiet --locked -p time-wise-server --example deployment -- check",
+    "deploy": "sh apps/server/scripts/with-rust.sh cargo run --quiet --locked -p time-wise-server --example deployment -- deploy",
+    "deploy:dry-run": "wrangler deploy --dry-run --outdir target/cloudflare-package"
+  },
+  "devDependencies": {
+    "wrangler": "4.156.0"
+  },
+  "cloudflare": {
+    "bindings": {
+      "AUTH_ORIGIN": {
+        "description": "Your canonical HTTPS origin, without a path. Configure its domain before using discovery. Authentication is disabled in this foundation."
+      },
+      "CLIENT_PROFILE_IDS": {
+        "description": "JSON array of enabled desktop profile IDs. Use only profiles supported by your desktop build."
+      },
+      "AUTH_DB": {
+        "description": "Deployment-owned D1 database. Preserve this database and its ID on redeployment. Authentication schema is added separately."
+      }
+    }
+  }
+}
