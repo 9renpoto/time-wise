@@ -1,7 +1,7 @@
 # Local Cloudflare runtime
 
 Run celld locally alongside the desktop application using Docker Compose.
-The official v0.6.3 image is pinned by digest in `compose.celld.yaml`; there is
+The official v0.6.3 image is pinned by digest in the root `compose.yaml`; there is
 no native Intel macOS release. The prerequisites are a POSIX shell, Docker with
 Compose, rustup with the repository's toolchain and Wasm target, for the Rust integration tests.
 
@@ -9,10 +9,10 @@ From the repository root:
 
 ```sh
 sh tools/celld/build.sh
-docker compose -f compose.celld.yaml up -d
+docker compose up -d
 curl --fail http://127.0.0.1:9876/
 curl --fail -X POST http://127.0.0.1:9876/counter
-docker compose -f compose.celld.yaml logs -f
+docker compose logs -f
 ```
 
 The root responds with `{"runtime":"celld","wasm":42}` after calling the
@@ -30,7 +30,7 @@ exercise a workers-rs shim or the production server package.
 Stop the environment with:
 
 ```sh
-docker compose -f compose.celld.yaml down
+docker compose down
 ```
 
 State remains in `tools/celld/fixture/.celld/dev` across stops and container

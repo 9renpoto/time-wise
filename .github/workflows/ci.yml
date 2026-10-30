@@ -52,7 +52,7 @@ jobs:
                 verify=true
                 windows=true
                 ;;
-              apps/desktop/*|apps/server/*|tools/celld/*|compose.celld.yaml|package.json|package-lock.json|wrangler.json)
+              apps/desktop/*|apps/server/*|tools/celld/*|compose.yaml|package.json|package-lock.json|wrangler.json)
                 verify=true
                 ;;
             esac

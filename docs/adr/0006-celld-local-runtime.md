@@ -10,6 +10,9 @@ through Docker Compose, with host access restricted to loopback. The official
 release has no Intel macOS binary, so Docker also provides a reproducible path
 for that development environment.
 
+Keep one project-level Compose file at `compose.yaml`; add future local services
+to that file rather than creating project-specific Compose files.
+
 Use `celld dev` and its persistent local store without cloud credentials or a
 remote bucket. Keep the initial synthetic Worker under `tools/celld`, separate
 from the reserved `apps/server` package. It checks HTTP, a Rust-generated Wasm
@@ -44,6 +47,9 @@ celldを導入する明示的な選択に従い、Cloudflare互換のローカ�
 公式v0.6.3コンテナをdigestで固定し、Docker Composeで起動する。ホスト側の公開先は
 loopbackだけにする。公式配布にIntel macOS用バイナリがないため、この環境でも
 Docker経由で再現可能な導入方法を用意する。
+
+プロジェクトのComposeファイルはrootの`compose.yaml`一つにする。今後のローカルserviceも
+同じファイルに追加し、プロジェクト固有のComposeファイルを増やさない。
 
 `celld dev`のローカル永続ストアを使い、cloud資格情報やremote bucketを不要にする。
 最初の合成Workerは`tools/celld`に置き、予約済みの`apps/server`から分離する。

@@ -135,7 +135,7 @@ impl Sandbox {
         run(
             command
                 .args(["compose", "-f"])
-                .arg(root().join("compose.celld.yaml"))
+                .arg(root().join("compose.yaml"))
                 .args(["-p", &self.name])
                 .args(args)
                 .env("CELLD_PROJECT_DIR", self.project.path())
