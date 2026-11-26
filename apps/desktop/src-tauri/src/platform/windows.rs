@@ -545,11 +545,11 @@ fn icon_to_png(icon: windows::Win32::UI::WindowsAndMessaging::HICON) -> Option<V
         // SAFETY: CreateDIBSection allocated byte_count bytes for the configured 32-bit DIB.
         let bgra = unsafe { std::slice::from_raw_parts(pixels.cast::<u8>(), byte_count) };
         let mut rgba = bgra.to_vec();
-        for pixel in rgba.chunks_exact_mut(4) {
+        for pixel in rgba.as_chunks_mut::<4>().0 {
             pixel.swap(0, 2);
         }
-        if rgba.chunks_exact(4).all(|pixel| pixel[3] == 0) {
-            for pixel in rgba.chunks_exact_mut(4) {
+        if rgba.as_chunks::<4>().0.iter().all(|pixel| pixel[3] == 0) {
+            for pixel in rgba.as_chunks_mut::<4>().0 {
                 if pixel[..3] != [0, 0, 0] {
                     pixel[3] = u8::MAX;
                 }

@@ -177,7 +177,7 @@ fn observe_missing_application() -> DesktopEvent {
 }
 
 fn observe_frontmost_application() -> DesktopEvent {
-    let application = unsafe { NSWorkspace::sharedWorkspace().frontmostApplication() };
+    let application = NSWorkspace::sharedWorkspace().frontmostApplication();
     application
         .as_deref()
         .map_or_else(observe_missing_application, observe_application)
@@ -198,18 +198,14 @@ fn application_from_notification(
 }
 
 fn observe_application(application: &NSRunningApplication) -> DesktopEvent {
-    // SAFETY: NSRunningApplication properties are immutable snapshots for the
-    // running process and are copied into Rust-owned values before returning.
-    let process_id = unsafe { application.processIdentifier() };
+    let process_id = application.processIdentifier();
     if process_id <= 0 {
         return DesktopEvent::foreground(None, Some(ObservationFailure::ProcessIdUnavailable));
     }
-    let executable = unsafe {
-        application
-            .executableURL()
-            .and_then(|url| url.path())
-            .map(|path| PathBuf::from(path.to_string()))
-    };
+    let executable = application
+        .executableURL()
+        .and_then(|url| url.path())
+        .map(|path| PathBuf::from(path.to_string()));
     let Some(executable) = executable else {
         return DesktopEvent::foreground(
             None,
@@ -218,13 +214,11 @@ fn observe_application(application: &NSRunningApplication) -> DesktopEvent {
             )),
         );
     };
-    let product_name = unsafe { application.localizedName().map(|name| name.to_string()) };
-    let bundle_identifier = unsafe {
-        application
-            .bundleIdentifier()
-            .map(|identifier| identifier.to_string())
-    };
-    let icon_png = unsafe { application.icon() }.as_deref().and_then(image_png);
+    let product_name = application.localizedName().map(|name| name.to_string());
+    let bundle_identifier = application
+        .bundleIdentifier()
+        .map(|identifier| identifier.to_string());
+    let icon_png = application.icon().as_deref().and_then(image_png);
 
     DesktopEvent::foreground(
         Some(ProcessIdentity {
@@ -243,8 +237,8 @@ fn image_png(image: &NSImage) -> Option<Vec<u8>> {
     // NSRunningApplication provides an NSImage whose backing representation may
     // vary by application. TIFF is AppKit's common interchange representation;
     // NSBitmapImageRep then produces bytes that browsers can display directly.
-    let tiff = unsafe { image.TIFFRepresentation() }?;
-    let bitmap = unsafe { NSBitmapImageRep::imageRepWithData(&tiff) }?;
+    let tiff = image.TIFFRepresentation()?;
+    let bitmap = NSBitmapImageRep::imageRepWithData(&tiff)?;
     let properties = NSDictionary::<NSBitmapImageRepPropertyKey, AnyObject>::new();
     let png = unsafe {
         bitmap.representationUsingType_properties(NSBitmapImageFileType::PNG, &properties)
