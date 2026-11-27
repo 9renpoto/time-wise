@@ -71,9 +71,23 @@ fn deployment_migrations_preserve_existing_data_on_repeated_setup() {
         "INSERT INTO auth_sessions (id, account_id, generation, provider_verified_at_ms, issued_at_ms, idle_expires_at_ms, absolute_expires_at_ms) \
          VALUES ('retained-session', 'retained-account', 'generation-1', 1000, 2000, 604802000, 2592001000);",
     ]);
+    fs::copy(
+        support::root().join("apps/server/migrations/0003_auth_attempts.sql"),
+        migrations.join("0003_auth_attempts.sql"),
+    )
+    .unwrap();
+    run(&["d1", "migrations", "apply", "AUTH_DB"]);
+    run(&[
+        "d1",
+        "execute",
+        "AUTH_DB",
+        "--command",
+        "INSERT INTO auth_attempts (id, generation, client_profile_id, purpose, comparison_code, claim_challenge_digest, launch_ticket_digest, created_at_ms) \
+         VALUES ('retained-attempt', 'generation-1', 'synthetic-profile', 'login', 'ABCDE01234', zeroblob(32), zeroblob(32), 1000);",
+    ]);
     run(&["d1", "migrations", "apply", "AUTH_DB"]);
     fs::write(
-        migrations.join("0003_synthetic.sql"),
+        migrations.join("0004_synthetic.sql"),
         "CREATE INDEX synthetic_value ON synthetic_records(value);",
     )
     .unwrap();
@@ -102,6 +116,19 @@ fn deployment_migrations_preserve_existing_data_on_repeated_setup() {
     assert_eq!(
         result[0]["results"],
         json!([{"subject": "1001", "account_id": "retained-account", "session_id": "retained-session"}]),
+    );
+    let result: serde_json::Value = serde_json::from_str(&run(&[
+        "d1",
+        "execute",
+        "AUTH_DB",
+        "--command",
+        "SELECT id, state, hard_expires_at_ms FROM auth_attempts;",
+        "--json",
+    ]))
+    .unwrap();
+    assert_eq!(
+        result[0]["results"],
+        json!([{"id": "retained-attempt", "state": "created", "hard_expires_at_ms": 931000}]),
     );
 }
 
@@ -163,6 +190,26 @@ fn auth_session_migration_enforces_credential_lifecycle_constraints() {
             include_str!("../migrations/0002_auth_sessions.sql"),
         ],
         |body| assert_eq!(body, serde_json::json!({"verified": true})),
+    );
+}
+
+#[test]
+#[ignore = "requires Docker; run explicitly with coverage in CI"]
+fn auth_attempt_migration_enforces_order_and_descriptor_constraints() {
+    support::run_d1_fixture(
+        "auth-attempt-smoke",
+        include_str!("fixtures/auth_attempts.mjs"),
+        &[include_str!("../migrations/0003_auth_attempts.sql")],
+        |body| {
+            assert_eq!(
+                body,
+                serde_json::json!({
+                    "state": "created",
+                    "callback_expires_at_ms": 601000,
+                    "hard_expires_at_ms": 931000
+                }),
+            );
+        },
     );
 }
 
