@@ -11,7 +11,7 @@ fn deployment_migrations_preserve_existing_data_on_repeated_setup() {
     let migrations = project.path().join("migrations");
     fs::create_dir(&migrations).unwrap();
     fs::write(
-        migrations.join("0001_synthetic.sql"),
+        migrations.join("0000_synthetic.sql"),
         "CREATE TABLE synthetic_records (id INTEGER PRIMARY KEY, value TEXT NOT NULL);",
     )
     .unwrap();
@@ -43,6 +43,20 @@ fn deployment_migrations_preserve_existing_data_on_repeated_setup() {
         "--command",
         "INSERT INTO synthetic_records VALUES (1, 'retained');",
     ]);
+    fs::copy(
+        support::root().join("apps/server/migrations/0001_auth_identity.sql"),
+        migrations.join("0001_auth_identity.sql"),
+    )
+    .unwrap();
+    run(&["d1", "migrations", "apply", "AUTH_DB"]);
+    run(&[
+        "d1",
+        "execute",
+        "AUTH_DB",
+        "--command",
+        "INSERT INTO auth_accounts VALUES ('retained-account'); \
+         INSERT INTO auth_identities VALUES ('github', '1001', 'retained-account');",
+    ]);
     run(&["d1", "migrations", "apply", "AUTH_DB"]);
     fs::write(
         migrations.join("0002_synthetic.sql"),
@@ -60,6 +74,92 @@ fn deployment_migrations_preserve_existing_data_on_repeated_setup() {
     ]))
     .unwrap();
     assert_eq!(result[0]["results"], json!([{"value":"retained"}]));
+    let result: serde_json::Value = serde_json::from_str(&run(&[
+        "d1",
+        "execute",
+        "AUTH_DB",
+        "--command",
+        "SELECT subject, account_id FROM auth_identities JOIN auth_accounts ON auth_accounts.id = account_id;",
+        "--json",
+    ]))
+    .unwrap();
+    assert_eq!(
+        result[0]["results"],
+        json!([{"subject": "1001", "account_id": "retained-account"}]),
+    );
+}
+
+#[test]
+#[ignore = "requires Docker; run explicitly with coverage in CI"]
+fn auth_identity_migration_enforces_d1_constraints() {
+    use reqwest::Method;
+    use serde_json::json;
+    use std::fs;
+
+    let migration =
+        fs::read_to_string(support::root().join("apps/server/migrations/0001_auth_identity.sql"))
+            .expect("authentication identity migration");
+    let mut sandbox = support::Sandbox::new();
+    fs::write(
+        sandbox.project.path().join("worker.mjs"),
+        format!(
+            "const migration = {};\n{}",
+            serde_json::to_string(&migration).unwrap(),
+            include_str!("fixtures/auth_identity.mjs"),
+        ),
+    )
+    .unwrap();
+    sandbox.configure(&json!({
+        "name": "auth-identity-smoke",
+        "main": "worker.mjs",
+        "no_bundle": true,
+        "compatibility_date": "2026-10-29",
+        "d1_databases": [{
+            "binding": "AUTH_DB",
+            "database_name": "synthetic-auth",
+            "database_id": "11111111-2222-3333-4444-555555555555"
+        }]
+    }));
+    let base = sandbox.start();
+    sandbox.wait(&base, "/ready", |status, body| {
+        status == 200 && body == &json!({"ready": true})
+    });
+    let (status, body, _) = sandbox.request(&base, "/verify", Method::POST).unwrap();
+    assert_eq!(status, 200, "{body}");
+    let outcomes = body["outcomes"].as_array().unwrap();
+    assert_eq!(outcomes.len(), 8);
+    let winner = outcomes
+        .iter()
+        .position(serde_json::Value::is_null)
+        .unwrap();
+    assert_eq!(
+        outcomes.iter().filter(|outcome| outcome.is_null()).count(),
+        1
+    );
+    for error in outcomes.iter().filter_map(serde_json::Value::as_str) {
+        assert!(error.contains("UNIQUE constraint failed"), "{error}");
+    }
+    for error in body["malformed"].as_array().unwrap() {
+        assert!(
+            error.as_str().unwrap().contains("CHECK constraint failed"),
+            "{body}"
+        );
+    }
+    for (field, constraint) in [
+        ("orphan", "FOREIGN KEY constraint failed"),
+        ("sameAccount", "UNIQUE constraint failed"),
+    ] {
+        assert!(body[field].as_str().unwrap().contains(constraint), "{body}");
+    }
+    assert_eq!(body["accounts"], 2);
+    assert_eq!(
+        body["associations"],
+        json!([
+            {"subject": "9007199254740992", "account_id": format!("candidate-{winner}")},
+            {"subject": "9007199254740993", "account_id": "other-account"},
+        ]),
+    );
+    sandbox.stop();
 }
 
 #[cfg(unix)]

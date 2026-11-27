@@ -76,8 +76,9 @@ npm run deploy
 a template ID is allowed at this stage. `deploy` requires a provisioned, nonzero
 UUID and validates the origin/profile syntax before invoking Wrangler. It applies
 regular `.sql` files from `apps/server/migrations` to **AUTH_DB**, then deploys.
-There are currently no authentication migrations (#195); an empty migration
-directory is skipped. No database reset/delete/create command exists in the runner.
+The initial authentication migration adds application accounts and GitHub identity
+associations. An empty migration directory is skipped. The deployment runner
+preserves the existing database.
 Wrangler records applied migrations, so an unchanged set is safe to apply again.
 A migration failure stops the Worker deployment. Review future migrations for
 compatibility with the currently deployed Worker; deployment is not a rollback
@@ -167,7 +168,8 @@ repository rootでnpm ci、npm run check:deployment、npx wrangler loginを実�
 既存環境は既存IDを使う。origin/profile/Worker名を設定後、npm run deploy:dry-run、
 npm run deployを実行する。checkは資格情報不要でtemplate IDを許すが、deployは実IDを要求する。
 SQLがあればAUTH_DBへmigrationを適用してからWorkerを配置し、失敗なら停止する。
-現在は#195のschema実装前なのでSQLはなくskipする。runnerにDB reset/delete/createはない。
+最初の認証マイグレーションはアプリアカウントと GitHub 主体の関連付けを追加する。
+SQLが空ならスキップし、既存DBは保持する。
 適用済みmigrationはWranglerが記録する。将来のmigrationは稼働Workerとの互換性を確認し、
 schema変更前にbackupする。DB変更はWorker配置の失敗やrollbackでは取り消されない。
 
