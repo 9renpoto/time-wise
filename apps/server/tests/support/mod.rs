@@ -78,6 +78,38 @@ pub fn build(script: &str) {
     .unwrap();
 }
 
+pub fn run_d1_fixture(name: &str, scenario: &str, migrations: &[&str], verify: impl FnOnce(Value)) {
+    use serde_json::json;
+
+    let mut sandbox = Sandbox::new();
+    // The pinned celld runtime needs a single JS module in no-bundle mode.
+    let worker = format!(
+        "const migrations = {};\n{scenario}\n{}",
+        serde_json::to_string(migrations).unwrap(),
+        include_str!("../fixtures/auth_worker.mjs"),
+    );
+    fs::write(sandbox.project.path().join("worker.mjs"), worker).unwrap();
+    sandbox.configure(&json!({
+        "name": name,
+        "main": "worker.mjs",
+        "no_bundle": true,
+        "compatibility_date": "2026-10-29",
+        "d1_databases": [{
+            "binding": "AUTH_DB",
+            "database_name": "synthetic-auth",
+            "database_id": "11111111-2222-3333-4444-555555555555"
+        }]
+    }));
+    let base = sandbox.start();
+    sandbox.wait(&base, "/ready", |status, body| {
+        status == 200 && body == &json!({"ready": true})
+    });
+    let (status, body, _) = sandbox.request(&base, "/verify", Method::POST).unwrap();
+    assert_eq!(status, 200, "{body}");
+    verify(body);
+    sandbox.stop();
+}
+
 pub struct Sandbox {
     pub project: TempDir,
     name: String,
