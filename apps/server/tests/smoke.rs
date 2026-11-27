@@ -57,9 +57,23 @@ fn deployment_migrations_preserve_existing_data_on_repeated_setup() {
         "INSERT INTO auth_accounts VALUES ('retained-account'); \
          INSERT INTO auth_identities VALUES ('github', '1001', 'retained-account');",
     ]);
+    fs::copy(
+        support::root().join("apps/server/migrations/0002_auth_sessions.sql"),
+        migrations.join("0002_auth_sessions.sql"),
+    )
+    .unwrap();
+    run(&["d1", "migrations", "apply", "AUTH_DB"]);
+    run(&[
+        "d1",
+        "execute",
+        "AUTH_DB",
+        "--command",
+        "INSERT INTO auth_sessions (id, account_id, generation, provider_verified_at_ms, issued_at_ms, idle_expires_at_ms, absolute_expires_at_ms) \
+         VALUES ('retained-session', 'retained-account', 'generation-1', 1000, 2000, 604802000, 2592001000);",
+    ]);
     run(&["d1", "migrations", "apply", "AUTH_DB"]);
     fs::write(
-        migrations.join("0002_synthetic.sql"),
+        migrations.join("0003_synthetic.sql"),
         "CREATE INDEX synthetic_value ON synthetic_records(value);",
     )
     .unwrap();
@@ -79,13 +93,15 @@ fn deployment_migrations_preserve_existing_data_on_repeated_setup() {
         "execute",
         "AUTH_DB",
         "--command",
-        "SELECT subject, account_id FROM auth_identities JOIN auth_accounts ON auth_accounts.id = account_id;",
+        "SELECT subject, auth_accounts.id AS account_id, auth_sessions.id AS session_id \
+         FROM auth_identities JOIN auth_accounts ON auth_accounts.id = auth_identities.account_id \
+         JOIN auth_sessions ON auth_sessions.account_id = auth_accounts.id;",
         "--json",
     ]))
     .unwrap();
     assert_eq!(
         result[0]["results"],
-        json!([{"subject": "1001", "account_id": "retained-account"}]),
+        json!([{"subject": "1001", "account_id": "retained-account", "session_id": "retained-session"}]),
     );
 }
 
@@ -159,6 +175,49 @@ fn auth_identity_migration_enforces_d1_constraints() {
             {"subject": "9007199254740993", "account_id": "other-account"},
         ]),
     );
+    sandbox.stop();
+}
+
+#[test]
+#[ignore = "requires Docker; run explicitly with coverage in CI"]
+fn auth_session_migration_enforces_credential_lifecycle_constraints() {
+    use reqwest::Method;
+    use serde_json::json;
+    use std::fs;
+
+    let migrations = support::root().join("apps/server/migrations");
+    let identity = fs::read_to_string(migrations.join("0001_auth_identity.sql")).unwrap();
+    let sessions = fs::read_to_string(migrations.join("0002_auth_sessions.sql"))
+        .expect("application session migration");
+    let mut sandbox = support::Sandbox::new();
+    fs::write(
+        sandbox.project.path().join("worker.mjs"),
+        format!(
+            "const identityMigration = {};\nconst sessionMigration = {};\n{}",
+            serde_json::to_string(&identity).unwrap(),
+            serde_json::to_string(&sessions).unwrap(),
+            include_str!("fixtures/auth_sessions.mjs"),
+        ),
+    )
+    .unwrap();
+    sandbox.configure(&json!({
+        "name": "auth-session-smoke",
+        "main": "worker.mjs",
+        "no_bundle": true,
+        "compatibility_date": "2026-10-29",
+        "d1_databases": [{
+            "binding": "AUTH_DB",
+            "database_name": "synthetic-auth",
+            "database_id": "11111111-2222-3333-4444-555555555555"
+        }]
+    }));
+    let base = sandbox.start();
+    sandbox.wait(&base, "/ready", |status, body| {
+        status == 200 && body == &json!({"ready": true})
+    });
+    let (status, body, _) = sandbox.request(&base, "/verify", Method::POST).unwrap();
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body, json!({"verified": true}));
     sandbox.stop();
 }
 
