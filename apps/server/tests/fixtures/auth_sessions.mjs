@@ -12,7 +12,7 @@ async function expectConstraint(operation, expected) {
   throw new Error(`Expected a ${expected} constraint failure`);
 }
 
-async function verify(db) {
+async function verify(db, [identityMigration, sessionMigration]) {
   await db.exec(identityMigration);
   await db.prepare("INSERT INTO auth_accounts VALUES ('session-owner'), ('other-owner')").run();
   await db.exec(sessionMigration);
@@ -76,16 +76,5 @@ async function verify(db) {
   if (counts.access_count !== 0 || counts.refresh_count !== 1 || counts.owner !== "other-owner") {
     throw new Error("Removing one session must remove its credential history and preserve the other session");
   }
+  return { verified: true };
 }
-
-export default {
-  async fetch(request, { AUTH_DB: db }) {
-    if (new URL(request.url).pathname === "/ready") return Response.json({ ready: true });
-    try {
-      await verify(db);
-      return Response.json({ verified: true });
-    } catch (error) {
-      return Response.json({ error: String(error) }, { status: 500 });
-    }
-  },
-};
