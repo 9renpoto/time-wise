@@ -1,5 +1,8 @@
 //! Authentication Worker foundation, with provider traffic disabled.
 
+#[cfg(target_arch = "wasm32")]
+pub mod oauth;
+
 use serde_json::json;
 use url::Url;
 
@@ -79,7 +82,7 @@ pub async fn fetch(
         .and_then(|(origin, profiles)| {
             Configuration::parse(&origin.to_string(), &profiles.to_string()).ok()
         });
-    let (status, body) = respond(&req.method().to_string(), &req.path(), config.as_ref());
+    let (status, body) = respond(req.method().as_ref(), &req.path(), config.as_ref());
     let mut response = worker::Response::ok(body)?.with_status(status);
     response
         .headers_mut()
