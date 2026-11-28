@@ -85,9 +85,14 @@ fn deployment_migrations_preserve_existing_data_on_repeated_setup() {
         "INSERT INTO auth_attempts (id, generation, client_profile_id, purpose, comparison_code, claim_challenge_digest, launch_ticket_digest, created_at_ms) \
          VALUES ('retained-attempt', 'generation-1', 'synthetic-profile', 'login', 'ABCDE01234', zeroblob(32), zeroblob(32), 1000);",
     ]);
+    fs::copy(
+        support::root().join("apps/server/migrations/0004_auth_oauth_correlation.sql"),
+        migrations.join("0004_auth_oauth_correlation.sql"),
+    )
+    .unwrap();
     run(&["d1", "migrations", "apply", "AUTH_DB"]);
     fs::write(
-        migrations.join("0004_synthetic.sql"),
+        migrations.join("0005_synthetic.sql"),
         "CREATE INDEX synthetic_value ON synthetic_records(value);",
     )
     .unwrap();
@@ -122,13 +127,13 @@ fn deployment_migrations_preserve_existing_data_on_repeated_setup() {
         "execute",
         "AUTH_DB",
         "--command",
-        "SELECT id, state, hard_expires_at_ms FROM auth_attempts;",
+        "SELECT id, state, hard_expires_at_ms, oauth_state_digest FROM auth_attempts;",
         "--json",
     ]))
     .unwrap();
     assert_eq!(
         result[0]["results"],
-        json!([{"id": "retained-attempt", "state": "created", "hard_expires_at_ms": 931000}]),
+        json!([{"id": "retained-attempt", "state": "created", "hard_expires_at_ms": 931000, "oauth_state_digest": null}]),
     );
 }
 
@@ -210,6 +215,31 @@ fn auth_attempt_migration_enforces_order_and_descriptor_constraints() {
                 }),
             );
         },
+    );
+}
+
+#[test]
+#[ignore = "requires Docker; run explicitly with coverage in CI"]
+fn auth_oauth_guards_browser_bootstrap_and_callback_admission() {
+    let statements = serde_json::json!({
+        "bootstrap": include_str!("../src/oauth/bootstrap.sql"),
+        "lookup": include_str!("../src/oauth/lookup.sql"),
+        "claim": include_str!("../src/oauth/claim.sql"),
+        "cancel": include_str!("../src/oauth/cancel.sql"),
+        "finish": include_str!("../src/oauth/finish.sql"),
+    });
+    let scenario = format!(
+        "const sql = {statements};\n{}",
+        include_str!("fixtures/auth_oauth.mjs")
+    );
+    support::run_d1_fixture(
+        "auth-oauth-smoke",
+        &scenario,
+        &[
+            include_str!("../migrations/0003_auth_attempts.sql"),
+            include_str!("../migrations/0004_auth_oauth_correlation.sql"),
+        ],
+        |body| assert_eq!(body, serde_json::json!({"verified": true})),
     );
 }
 
